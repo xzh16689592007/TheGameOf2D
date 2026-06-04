@@ -14,6 +14,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -156,12 +157,20 @@ void UModengResultWidget::ApplyTextStyle(UTextBlock* TextBlock, int32 FontSize) 
 	TextBlock->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
 }
 
-void UModengResultWidget::HandleRestartClicked()
+void UModengResultWidget::RestoreGameplayInput() const
 {
 	if (APlayerController* PlayerController = GetOwningPlayer())
 	{
 		PlayerController->SetPause(false);
+		PlayerController->SetInputMode(FInputModeGameOnly());
+		PlayerController->SetShowMouseCursor(false);
 	}
+}
+
+void UModengResultWidget::HandleRestartClicked()
+{
+	RestoreGameplayInput();
+	RemoveFromParent();
 
 	const FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
 	UGameplayStatics::OpenLevel(this, FName(*LevelName));
@@ -169,5 +178,6 @@ void UModengResultWidget::HandleRestartClicked()
 
 void UModengResultWidget::HandleQuitClicked()
 {
+	RestoreGameplayInput();
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
 }

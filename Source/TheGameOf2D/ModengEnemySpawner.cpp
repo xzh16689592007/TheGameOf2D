@@ -25,6 +25,13 @@ void AModengEnemySpawner::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		PlayerController->SetPause(false);
+		PlayerController->SetInputMode(FInputModeGameOnly());
+		PlayerController->SetShowMouseCursor(false);
+	}
+
 	if (bSpawnOnBeginPlay)
 	{
 		StartNextWave();

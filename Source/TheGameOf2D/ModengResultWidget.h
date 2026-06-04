@@ -41,6 +41,7 @@ private:
 	void BuildWidgetTreeIfNeeded();
 	void RefreshResultText();
 	void ApplyTextStyle(UTextBlock* TextBlock, int32 FontSize) const;
+	void RestoreGameplayInput() const;
 
 	UFUNCTION()
 	void HandleRestartClicked();
