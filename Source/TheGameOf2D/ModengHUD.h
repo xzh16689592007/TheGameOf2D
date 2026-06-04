@@ -24,5 +24,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD")
 	float LineHeight = 26.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Interaction", meta = (ClampMin = "0.0"))
+	float LanternPromptRadius = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Interaction")
+	FVector LanternPromptWorldOffset = FVector(0.0f, 0.0f, 120.0f);
+
 	void DrawStatusLine(const FString& Text, int32 LineIndex, const FLinearColor& Color) const;
+	void DrawLanternRepairPrompt() const;
 };

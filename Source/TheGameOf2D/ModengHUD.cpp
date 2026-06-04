@@ -7,6 +7,7 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
 #include "ModengEnemy.h"
 #include "ModengEnemySpawner.h"
 #include "ModengLantern.h"
@@ -93,6 +94,8 @@ void AModengHUD::DrawHUD()
 		DrawStatusLine(TEXT("Weapon: --"), 4, FLinearColor::White);
 		DrawStatusLine(TEXT("Damage: --"), 5, FLinearColor::White);
 	}
+
+	DrawLanternRepairPrompt();
 }
 
 void AModengHUD::DrawStatusLine(const FString& Text, int32 LineIndex, const FLinearColor& Color) const
@@ -105,5 +108,63 @@ void AModengHUD::DrawStatusLine(const FString& Text, int32 LineIndex, const FLin
 	FCanvasTextItem TextItem(FVector2D(PanelX, PanelY + LineHeight * LineIndex), FText::FromString(Text), GEngine->GetSmallFont(), Color);
 	TextItem.EnableShadow(FLinearColor::Black);
 	TextItem.Scale = FVector2D(1.15f, 1.15f);
+	Canvas->DrawItem(TextItem);
+}
+
+void AModengHUD::DrawLanternRepairPrompt() const
+{
+	if (!Canvas || !GEngine || !GetWorld())
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = GetOwningPlayerController();
+	const APawn* PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
+	if (!PlayerController || !PlayerPawn)
+	{
+		return;
+	}
+
+	const AModengLantern* ClosestRepairableLantern = nullptr;
+	float ClosestDistanceSq = FMath::Square(LanternPromptRadius);
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		const AModengLantern* Lantern = *It;
+		if (!Lantern || Lantern->GetDurabilityPercent() >= 0.999f)
+		{
+			continue;
+		}
+
+		const float DistanceSq = FVector::DistSquared(PlayerPawn->GetActorLocation(), Lantern->GetActorLocation());
+		if (DistanceSq <= ClosestDistanceSq)
+		{
+			ClosestDistanceSq = DistanceSq;
+			ClosestRepairableLantern = Lantern;
+		}
+	}
+
+	if (!ClosestRepairableLantern)
+	{
+		return;
+	}
+
+	FVector2D ScreenLocation;
+	if (!PlayerController->ProjectWorldLocationToScreen(ClosestRepairableLantern->GetActorLocation() + LanternPromptWorldOffset, ScreenLocation))
+	{
+		return;
+	}
+
+	const FString PromptText = TEXT("E / F Repair");
+	const FVector2D ShadowOffset(1.5f, 1.5f);
+	FCanvasTextItem ShadowItem(ScreenLocation + ShadowOffset, FText::FromString(PromptText), GEngine->GetSmallFont(), FLinearColor::Black);
+	ShadowItem.bCentreX = true;
+	ShadowItem.EnableShadow(FLinearColor::Transparent);
+	ShadowItem.Scale = FVector2D(1.25f, 1.25f);
+	Canvas->DrawItem(ShadowItem);
+
+	FCanvasTextItem TextItem(ScreenLocation, FText::FromString(PromptText), GEngine->GetSmallFont(), FLinearColor(1.0f, 0.86f, 0.35f));
+	TextItem.bCentreX = true;
+	TextItem.EnableShadow(FLinearColor::Black);
+	TextItem.Scale = FVector2D(1.25f, 1.25f);
 	Canvas->DrawItem(TextItem);
 }

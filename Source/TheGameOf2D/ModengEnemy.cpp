@@ -3,11 +3,12 @@
 
 #include "ModengEnemy.h"
 
+#include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Animation/AnimInstance.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -17,6 +18,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "ModengLantern.h"
+#include "ModengEnemyHealthWidget.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -37,6 +39,16 @@ AModengEnemy::AModengEnemy()
 	EnemyBody->SetRelativeScale3D(EnemyBodyScale);
 	EnemyBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	EnemyBody->SetCastShadow(false);
+
+	HealthBarComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
+	HealthBarComponent->SetupAttachment(RootComponent);
+	HealthBarComponent->SetRelativeLocation(HealthBarRelativeLocation);
+	HealthBarComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	HealthBarComponent->SetDrawSize(HealthBarDrawSize);
+	HealthBarComponent->SetWidgetClass(UModengEnemyHealthWidget::StaticClass());
+	HealthBarComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HealthBarComponent->SetHiddenInGame(true);
+	HealthBarComponent->SetVisibility(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh.Succeeded())
@@ -84,6 +96,7 @@ void AModengEnemy::BeginPlay()
 	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 	ConfigureEnemyVisuals();
+	InitializeHealthBar();
 	FindTargetLantern();
 }
 
@@ -194,6 +207,7 @@ void AModengEnemy::ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacte
 	}
 
 	CurrentHealth = FMath::Clamp(CurrentHealth - DamageAmount, 0.0f, MaxHealth);
+	UpdateHealthBar();
 	if (CurrentHealth <= 0.0f)
 	{
 		Die();
@@ -201,6 +215,7 @@ void AModengEnemy::ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacte
 	}
 
 	FlashHit();
+	ShowHealthBar();
 }
 
 float AModengEnemy::GetHealthPercent() const
@@ -222,6 +237,8 @@ void AModengEnemy::Die()
 {
 	bIsDead = true;
 	GetWorld()->GetTimerManager().ClearTimer(HitFlashTimer);
+	GetWorld()->GetTimerManager().ClearTimer(HealthBarHideTimer);
+	HideHealthBar();
 
 	if (LastDamagingPlayer)
 	{
@@ -318,4 +335,74 @@ void AModengEnemy::FlashHit()
 void AModengEnemy::RestoreBodyColor()
 {
 	SetEnemyBodyColor(EnemyBodyColor);
+}
+
+void AModengEnemy::InitializeHealthBar()
+{
+	if (!HealthBarComponent)
+	{
+		return;
+	}
+
+	HealthBarComponent->SetRelativeLocation(HealthBarRelativeLocation);
+	HealthBarComponent->SetDrawSize(HealthBarDrawSize);
+	HealthBarComponent->SetWidgetClass(UModengEnemyHealthWidget::StaticClass());
+	HealthBarComponent->InitWidget();
+
+	HealthBarWidget = Cast<UModengEnemyHealthWidget>(HealthBarComponent->GetUserWidgetObject());
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->SetBarColor(HealthBarColor);
+		HealthBarWidget->SetHealthPercent(GetHealthPercent());
+	}
+
+	if (bShowHealthBarOnlyAfterDamage)
+	{
+		HideHealthBar();
+	}
+	else
+	{
+		ShowHealthBar();
+	}
+}
+
+void AModengEnemy::UpdateHealthBar()
+{
+	if (!HealthBarWidget && HealthBarComponent)
+	{
+		HealthBarWidget = Cast<UModengEnemyHealthWidget>(HealthBarComponent->GetUserWidgetObject());
+	}
+
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->SetHealthPercent(GetHealthPercent());
+	}
+}
+
+void AModengEnemy::ShowHealthBar()
+{
+	if (!HealthBarComponent || bIsDead)
+	{
+		return;
+	}
+
+	HealthBarComponent->SetHiddenInGame(false);
+	HealthBarComponent->SetVisibility(true);
+
+	if (bShowHealthBarOnlyAfterDamage)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(HealthBarHideTimer);
+		GetWorld()->GetTimerManager().SetTimer(HealthBarHideTimer, this, &AModengEnemy::HideHealthBar, HealthBarVisibleDuration, false);
+	}
+}
+
+void AModengEnemy::HideHealthBar()
+{
+	if (!HealthBarComponent)
+	{
+		return;
+	}
+
+	HealthBarComponent->SetHiddenInGame(true);
+	HealthBarComponent->SetVisibility(false);
 }

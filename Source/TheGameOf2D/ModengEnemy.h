@@ -11,8 +11,10 @@ class ASideScrollingCharacter;
 class UAnimInstance;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UModengEnemyHealthWidget;
 class USkeletalMesh;
 class UStaticMeshComponent;
+class UWidgetComponent;
 
 UCLASS()
 class THEGAMEOF2D_API AModengEnemy : public ACharacter
@@ -28,6 +30,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
 	UStaticMeshComponent* EnemyBody;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Health")
+	UWidgetComponent* HealthBarComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UModengEnemyHealthWidget> HealthBarWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> EnemyBodyMaterial;
@@ -92,6 +100,21 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	bool bOverrideBodyMaterialColor = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar")
+	bool bShowHealthBarOnlyAfterDamage = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar", meta = (ClampMin = "0.1"))
+	float HealthBarVisibleDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar")
+	FVector HealthBarRelativeLocation = FVector(0.0f, 0.0f, 115.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar")
+	FVector2D HealthBarDrawSize = FVector2D(90.0f, 12.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar")
+	FLinearColor HealthBarColor = FLinearColor(0.22f, 0.9f, 0.36f, 1.0f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Debug")
 	bool bShowGameplayDebugMessages = false;
 
@@ -104,6 +127,7 @@ protected:
 	float TimeUntilNextAttack = 0.0f;
 	float TimeUntilRetarget = 0.0f;
 	FTimerHandle HitFlashTimer;
+	FTimerHandle HealthBarHideTimer;
 	bool bIsDead = false;
 
 	virtual void FindTargetLantern();
@@ -114,6 +138,10 @@ protected:
 	void SetEnemyBodyColor(const FLinearColor& Color);
 	void FlashHit();
 	void RestoreBodyColor();
+	void InitializeHealthBar();
+	void UpdateHealthBar();
+	void ShowHealthBar();
+	void HideHealthBar();
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
