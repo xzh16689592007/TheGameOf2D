@@ -49,6 +49,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Reward", meta = (ClampMin = "0"))
 	int32 InkReward = 1;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Debug")
+	bool bShowGameplayDebugMessages = false;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Enemy|Targeting")
 	AModengLantern* TargetLantern = nullptr;
 

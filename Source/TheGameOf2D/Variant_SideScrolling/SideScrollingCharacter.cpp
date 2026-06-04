@@ -217,7 +217,7 @@ void ASideScrollingCharacter::DoJumpEnd()
 
 void ASideScrollingCharacter::DoInteract()
 {
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Cyan, TEXT("Interact pressed"));
 	}
@@ -251,7 +251,7 @@ void ASideScrollingCharacter::DoInteract()
 		}
 	}
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Red, TEXT("No interact target"));
 	}
@@ -300,7 +300,7 @@ void ASideScrollingCharacter::DoAttack()
 	{
 		ClosestEnemy->ApplyDamageToEnemy(GetCurrentAttackDamage(), this);
 
-		if (GEngine)
+		if (bShowGameplayDebugMessages && GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Yellow, TEXT("Player hit enemy"));
 		}
@@ -308,7 +308,7 @@ void ASideScrollingCharacter::DoAttack()
 		return;
 	}
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
 	}
@@ -351,7 +351,7 @@ void ASideScrollingCharacter::AddInk(int32 Amount)
 
 	CurrentInk += Amount;
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		const FString Message = FString::Printf(TEXT("Ink +%d  Total: %d"), Amount, CurrentInk);
 		GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor::Cyan, Message);
@@ -392,7 +392,7 @@ void ASideScrollingCharacter::TryUpgradeWeapon()
 		CurrentInk -= InkNeededPerWeaponLevel;
 		WeaponLevel++;
 
-		if (GEngine)
+		if (bShowGameplayDebugMessages && GEngine)
 		{
 			const FString Message = FString::Printf(TEXT("Weapon upgraded to Lv.%d"), WeaponLevel);
 			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Emerald, Message);

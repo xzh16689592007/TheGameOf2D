@@ -64,6 +64,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
 	float AttackDamage = 25.0f;
 
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
+	bool bShowGameplayDebugMessages = false;
+
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.01"))
 	float AttackVisualDuration = 0.12f;
 

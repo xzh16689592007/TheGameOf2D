@@ -142,7 +142,7 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	TimeUntilNextAttack = AttackInterval;
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Orange, TEXT("Enemy damaged lantern"));
 	}
@@ -194,7 +194,7 @@ void AModengEnemy::Die()
 	SetActorEnableCollision(false);
 	Destroy();
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Enemy defeated"));
 	}

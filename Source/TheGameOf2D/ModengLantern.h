@@ -50,6 +50,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
 	FLinearColor ExtinguishedColor = FLinearColor(0.08f, 0.08f, 0.08f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Debug")
+	bool bShowGameplayDebugMessages = false;
+
 public:
 	UFUNCTION(BlueprintCallable, Category = "Lantern")
 	void ApplyDamageToLantern(float DamageAmount);

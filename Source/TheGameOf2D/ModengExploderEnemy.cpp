@@ -25,7 +25,7 @@ void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor::Red, TEXT("Exploder burst damaged lantern"));
 	}

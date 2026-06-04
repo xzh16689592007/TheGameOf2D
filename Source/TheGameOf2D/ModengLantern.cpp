@@ -100,7 +100,7 @@ void AModengLantern::Interaction(AActor* Interactor)
 {
 	RepairByDefaultAmount();
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Green, TEXT("Lantern repaired"));
 	}
