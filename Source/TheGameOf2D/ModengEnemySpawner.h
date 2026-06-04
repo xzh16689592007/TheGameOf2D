@@ -7,6 +7,10 @@
 #include "ModengEnemySpawner.generated.h"
 
 class AModengEnemy;
+class UModengResultWidget;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FModengGameEndedSignature, bool, bPlayerWon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FModengGameResultSignature);
 
 UCLASS()
 class THEGAMEOF2D_API AModengEnemySpawner : public AActor
@@ -30,6 +34,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
 	bool HasGameEnded() const { return bGameEnded; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Spawner|Game")
+	FModengGameEndedSignature OnGameEnded;
+
+	UPROPERTY(BlueprintAssignable, Category = "Spawner|Game")
+	FModengGameResultSignature OnVictory;
+
+	UPROPERTY(BlueprintAssignable, Category = "Spawner|Game")
+	FModengGameResultSignature OnDefeat;
 
 protected:
 	virtual void BeginPlay() override;
@@ -71,6 +84,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner")
 	bool bSpawnOnBeginPlay = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
+	TSubclassOf<UModengResultWidget> ResultWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Debug")
+	bool bShowGameplayDebugMessages = false;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Spawner|Wave")
 	int32 CurrentWave = 0;
 
@@ -82,6 +101,9 @@ protected:
 
 	FTimerHandle SpawnTimer;
 	FTimerHandle NextWaveTimer;
+	UPROPERTY(Transient)
+	TObjectPtr<UModengResultWidget> ResultWidget;
+
 	bool bWaveActive = false;
 	bool bGameEnded = false;
 
@@ -96,4 +118,5 @@ protected:
 	bool AreAllLanternsExtinguished() const;
 	void CheckWaveProgress();
 	void EndGame(bool bPlayerWon);
+	void ShowResultWidget(bool bPlayerWon);
 };

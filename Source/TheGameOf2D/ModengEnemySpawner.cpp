@@ -4,16 +4,21 @@
 #include "ModengEnemySpawner.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "ModengEnemy.h"
 #include "ModengLantern.h"
+#include "ModengResultWidget.h"
 #include "TimerManager.h"
 
 AModengEnemySpawner::AModengEnemySpawner()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	ResultWidgetClass = UModengResultWidget::StaticClass();
 }
 
 void AModengEnemySpawner::BeginPlay()
@@ -85,7 +90,7 @@ void AModengEnemySpawner::SpawnEnemy()
 	{
 		EnemiesSpawnedThisWave++;
 
-		if (GEngine)
+		if (bShowGameplayDebugMessages && GEngine)
 		{
 			const FString Message = FString::Printf(TEXT("Wave %d enemy spawned (%d/%d)"), CurrentWave, EnemiesSpawnedThisWave, EnemiesToSpawnThisWave);
 			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, Message);
@@ -111,7 +116,7 @@ void AModengEnemySpawner::StartNextWave()
 	EnemiesToSpawnThisWave = BaseEnemiesPerWave + ExtraEnemiesPerWave * (CurrentWave - 1);
 	bWaveActive = true;
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		const FString Message = FString::Printf(TEXT("Wave %d started: %d enemies"), CurrentWave, EnemiesToSpawnThisWave);
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Message);
@@ -212,7 +217,7 @@ void AModengEnemySpawner::CheckWaveProgress()
 		return;
 	}
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		const FString Message = FString::Printf(TEXT("Wave %d cleared"), CurrentWave);
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green, Message);
@@ -233,8 +238,52 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 	GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
 
-	if (GEngine)
+	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 8.0f, bPlayerWon ? FColor::Green : FColor::Red, bPlayerWon ? TEXT("Victory: all waves cleared") : TEXT("Defeat: all lanterns extinguished"));
 	}
+
+	if (bPlayerWon)
+	{
+		OnVictory.Broadcast();
+	}
+	else
+	{
+		OnDefeat.Broadcast();
+	}
+
+	OnGameEnded.Broadcast(bPlayerWon);
+	ShowResultWidget(bPlayerWon);
+}
+
+void AModengEnemySpawner::ShowResultWidget(bool bPlayerWon)
+{
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	if (!ResultWidget && ResultWidgetClass)
+	{
+		ResultWidget = CreateWidget<UModengResultWidget>(PlayerController, ResultWidgetClass);
+	}
+
+	if (!ResultWidget)
+	{
+		return;
+	}
+
+	ResultWidget->SetResult(bPlayerWon);
+	if (!ResultWidget->IsInViewport())
+	{
+		ResultWidget->AddToViewport(100);
+	}
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(ResultWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PlayerController->SetInputMode(InputMode);
+	PlayerController->SetShowMouseCursor(true);
+	PlayerController->SetPause(true);
 }
