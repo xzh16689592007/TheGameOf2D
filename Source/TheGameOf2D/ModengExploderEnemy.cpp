@@ -17,6 +17,7 @@ AModengExploderEnemy::AModengExploderEnemy()
 	EnemyBodyScale = FVector(1.05f, 1.05f, 1.05f);
 	EnemyBodyColor = FLinearColor(0.72f, 0.08f, 0.05f);
 	HitFlashColor = FLinearColor(1.0f, 0.72f, 0.22f);
+	bOverrideBodyMaterialColor = true;
 }
 
 void AModengExploderEnemy::AttackTarget(float DeltaSeconds)

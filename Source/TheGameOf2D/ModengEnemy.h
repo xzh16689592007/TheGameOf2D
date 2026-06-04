@@ -66,6 +66,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual", meta = (ClampMin = "0.01"))
 	float HitFlashDuration = 0.08f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	bool bOverrideBodyMaterialColor = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Debug")
 	bool bShowGameplayDebugMessages = false;
 

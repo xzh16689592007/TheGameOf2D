@@ -225,13 +225,12 @@ void AModengEnemy::ConfigureEnemyVisuals()
 	EnemyBody->SetRelativeScale3D(EnemyBodyScale);
 
 	UMaterialInterface* BaseMaterial = EnemyBody->GetMaterial(0);
-	if (BaseMaterial)
+	if (bOverrideBodyMaterialColor && BaseMaterial)
 	{
 		EnemyBodyMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 		EnemyBody->SetMaterial(0, EnemyBodyMaterial);
+		SetEnemyBodyColor(EnemyBodyColor);
 	}
-
-	SetEnemyBodyColor(EnemyBodyColor);
 }
 
 void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)

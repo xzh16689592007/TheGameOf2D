@@ -31,6 +31,14 @@
 
 - Main custom level: `Content/MoDeng/Maps/L_Level01_Street.umap`
 - Main custom assets folder: `Content/MoDeng`
+- Imported Fab asset folder: `Content/ROG_Creatures`
+  - Current imported pack: `ROG Creatures: Stickman`
+  - Important resources:
+    - `Content/ROG_Creatures/Stickman/Meshes/SM_Stickman.uasset`
+    - `Content/ROG_Creatures/Stickman/Meshes/SK_Stickman.uasset`
+    - `Content/ROG_Creatures/Stickman/Animations/ABP_Stickman.uasset`
+    - `Content/ROG_Creatures/Stickman/Animations/A_Stickman_Idle.uasset`
+    - `Content/ROG_Creatures/Stickman/Animations/A_Stickman_Walk.uasset`
 - Important Blueprints:
   - `Content/MoDeng/Blueprints/BP_ModengLantern.uasset`
   - `Content/MoDeng/Blueprints/BP_ModengEnemy.uasset`
@@ -57,6 +65,9 @@
   - Attacks lantern when in range.
   - Has health and ink reward.
   - Enemy collision is query/overlap only, so enemies do not physically block player or each other.
+  - Has `EnemyBody` as a `UStaticMeshComponent` for current visuals.
+  - `BP_ModengEnemy` currently uses `SM_Stickman` on `EnemyBody`.
+  - C++ supports optional material color override and hit flash for placeholder visuals. For imported art, keep `bOverrideBodyMaterialColor` false so the model keeps its own material.
 
 - `AModengFastEnemy`
   - Files:
@@ -64,6 +75,7 @@
     - `Source/TheGameOf2D/ModengFastEnemy.cpp`
   - Inherits `AModengEnemy`.
   - Faster, lower health, faster attack interval.
+  - Currently still uses placeholder visual defaults unless its Blueprint is updated.
 
 - `AModengExploderEnemy`
   - Files:
@@ -72,6 +84,7 @@
   - Inherits `AModengEnemy`.
   - Overrides attack behavior.
   - Bursts near lantern, deals larger damage, then dies.
+  - Currently still uses placeholder visual defaults unless its Blueprint is updated.
 
 - `AModengEnemySpawner`
   - Files:
@@ -80,6 +93,18 @@
   - Wave-based spawner.
   - Exposes `EnemyTypes`, `TotalWaves`, `BaseEnemiesPerWave`, `ExtraEnemiesPerWave`, `SpawnInterval`, `MaxAliveEnemies`, `DelayBetweenWaves`.
   - Checks victory/defeat.
+  - Shows C++ result UI on victory/defeat.
+  - Exposes `OnGameEnded`, `OnVictory`, and `OnDefeat` delegates for Blueprint/UI/VFX hooks.
+  - Restores gameplay input on BeginPlay as a safety net after restarting from the result screen.
+
+- `UModengResultWidget`
+  - Files:
+    - `Source/TheGameOf2D/ModengResultWidget.h`
+    - `Source/TheGameOf2D/ModengResultWidget.cpp`
+  - Native C++ UMG result widget.
+  - Shows Victory/Defeat text.
+  - Provides Restart and Quit buttons.
+  - Restart restores `GameOnly` input mode, hides mouse cursor, unpauses, removes the widget, then reloads the current level.
 
 - `AModengHUD`
   - Files:
@@ -100,7 +125,8 @@
   - Attack:
     - `J` and left mouse button call `DoAttack()`.
     - Uses a box overlap from the player forward, not a single sphere.
-    - Has a temporary cube attack visual.
+    - Has a short cylinder-based slash/range visual instead of the old debug cube.
+    - Applies light knockback to enemies that survive the hit.
   - Progression:
     - `AddInk()`
     - weapon level
@@ -112,6 +138,20 @@
 - Jump: template jump input.
 - Repair/interact: `E` or `F`.
 - Attack: left mouse button or `J`.
+
+## Current Visual Asset State
+
+- `BP_ModengEnemy` has been updated manually in UE:
+  - `EnemyBody.StaticMesh = SM_Stickman`.
+  - `EnemyBody` transform was adjusted so the Stickman stands on the ground.
+  - `EnemyBody` material was changed to a Stickman material instance, so it no longer appears white.
+- The current enemy Stickman is still used as a static mesh, so it does not play idle/walk/attack animations yet.
+- `SK_Stickman` and `ABP_Stickman` are present and ready for the next upgrade step.
+- Recommended next visual upgrade:
+  - Add/enable a skeletal mesh component for enemies, or use the inherited `ACharacter::Mesh`.
+  - Assign `SK_Stickman`.
+  - Assign `ABP_Stickman`.
+  - Hide or remove the static `EnemyBody` once skeletal visuals are working.
 
 ## Build Commands
 
@@ -162,46 +202,23 @@ Expected content:
 </Configuration>
 ```
 
-## Git Status At Handoff
-
-Last local commits:
+## Recent Commits
 
 ```text
+50f2eed Differentiate enemy visuals
+5b4c2a8 Restore input after restarting from result screen
+3be1dee Improve player attack feedback
+31baa68 Add victory and defeat result UI
+49ebb54 Update Level01 street actors
+b8a63ca Add gameplay debug message toggles
 ef9f795 Add gameplay status HUD
 b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Important: `ef9f795 Add gameplay status HUD` is committed locally but was not pushed because GitHub connection failed.
+Note: this handoff file may be updated again in the same working session after the latest Stickman asset commit is created.
 
-Current branch state at handoff:
-
-```text
-main...origin/main [ahead 1]
-```
-
-Run this when network is OK:
-
-```powershell
-git push
-```
-
-There are also local map/external actor asset changes not committed:
-
-```text
-M Content/__ExternalActors__/MoDeng/Maps/L_Level01_Street/3/5P/HGNJC3M1MVZIA2J2W73478.uasset
-D Content/__ExternalActors__/MoDeng/Maps/L_Level01_Street/E/OW/X7XMD5DS48EW4F8XSTC9OO.uasset
-```
-
-Actually `git status` shows the second as deleted:
-
-```text
-D Content/__ExternalActors__/MoDeng/Maps/L_Level01_Street/E/OW/X7XMD5DS48EW4F8XSTC9OO.uasset
-```
-
-These are likely user changes from editing the level in UE. Do not revert or commit them without user confirmation.
-
-## Git Setup
+## Git Setup And Notes
 
 - `.gitignore` exists and ignores:
   - `Binaries/`
@@ -209,9 +226,10 @@ These are likely user changes from editing the level in UE. Do not revert or com
   - `Saved/`
   - `DerivedDataCache/`
   - `.vs/`
-
 - `.gitattributes` exists and tracks `.uasset`, `.umap`, images, audio, video, etc. through Git LFS.
 - Git LFS is installed and initialized.
+- The Fab asset import under `Content/ROG_Creatures` should be committed through Git LFS.
+- `Config/DefaultEditor.ini` may get noisy editor preview-profile changes from opening imported assets. Do not commit those preview-profile changes unless the team explicitly wants editor profile settings in source control.
 
 Team clone instructions:
 
@@ -223,49 +241,37 @@ git lfs pull
 
 ## Known Issues / Rough Edges
 
-- Attack visual is currently a temporary cube, useful for debugging but visually ugly.
-- Enemies are placeholder cube meshes.
+- Basic enemy has been visually swapped to the imported Stickman static mesh, but it is not animated yet.
+- Fast and exploder enemies still need their own distinct model/animation setup.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
-- Debug messages still appear in the top-left for many events.
+- Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
 - If all lanterns are on platforms or unreachable by X-only enemies, enemies may not behave as intended.
-- Current game lacks polished animations, hit feedback, sound, particles, and UI art.
+- Current game lacks polished enemy animations, sound, particles, and UI art.
 
 ## Suggested Next Steps
 
-1. Push local HUD commit when network works:
+1. Commit/push the current Stickman asset integration if not already done:
+   - `Content/ROG_Creatures/**`
+   - `Content/MoDeng/Blueprints/BP_ModengEnemy.uasset`
+   - C++ material override changes in `AModengEnemy`
+   - This updated `PROJECT_HANDOFF.md`
 
-```powershell
-git push
-```
+2. Upgrade enemies from static Stickman mesh to animated skeletal visuals:
+   - Use `SK_Stickman`.
+   - Use `ABP_Stickman`.
+   - Start with `BP_ModengEnemy`.
+   - Keep collision on the capsule, not on the mesh.
 
-2. Test HUD in UE:
-   - Open `L_Level01_Street`.
-   - Play.
-   - Confirm the HUD shows wave, enemies, lanterns, weapon stats.
+3. Add enemy health bars:
+   - C++ `UWidgetComponent` on enemies.
+   - Hide at full health or show only after damage.
 
-3. Decide whether to commit current map changes:
-   - If the scene looks correct, commit the two `Content/__ExternalActors__/MoDeng/...` changes.
-   - If not, inspect in UE first. Do not blindly revert unless user explicitly asks.
+4. Add lantern interaction prompt:
+   - Show `E / F Repair` near damaged lanterns when player is close.
 
-4. Replace temporary attack cube visual:
-   - Option A: C++ spawn a translucent slash mesh.
-   - Option B: Blueprint/Niagara slash VFX.
-   - Option C: use existing mannequin attack montage if suitable.
-
-5. Add better enemy visuals:
-   - Different scale/color/material per enemy type.
-   - Fast enemy smaller and darker.
-   - Exploder enemy round or glowing red.
-
-6. Add simple UMG start/end/result UI:
-   - Victory screen.
-   - Defeat screen.
-   - Restart button.
-
-7. Later: upgrade enemy movement beyond X-axis:
+5. Later: upgrade enemy movement beyond X-axis:
    - Route point system for platform levels.
    - Flying enemy.
    - Ranged enemy.
    - Climber enemy.
-
