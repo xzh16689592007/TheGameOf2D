@@ -8,11 +8,12 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "ModengEnemy.h"
+#include "ModengLantern.h"
 #include "TimerManager.h"
 
 AModengEnemySpawner::AModengEnemySpawner()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void AModengEnemySpawner::BeginPlay()
@@ -21,23 +22,36 @@ void AModengEnemySpawner::BeginPlay()
 
 	if (bSpawnOnBeginPlay)
 	{
-		SpawnEnemy();
-	}
-
-	if (bAutoSpawn)
-	{
-		GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &AModengEnemySpawner::SpawnEnemy, SpawnInterval, true);
+		StartNextWave();
 	}
 }
 
-void AModengEnemySpawner::SpawnEnemy()
+void AModengEnemySpawner::Tick(float DeltaSeconds)
 {
-	if (EnemyTypes.Num() == 0)
+	Super::Tick(DeltaSeconds);
+
+	if (bGameEnded)
 	{
 		return;
 	}
 
-	if (MaxSpawnCount > 0 && SpawnedCount >= MaxSpawnCount)
+	if (AreAllLanternsExtinguished())
+	{
+		EndGame(false);
+		return;
+	}
+
+	CheckWaveProgress();
+}
+
+void AModengEnemySpawner::SpawnEnemy()
+{
+	if (bGameEnded || !bWaveActive || EnemyTypes.Num() == 0)
+	{
+		return;
+	}
+
+	if (EnemiesSpawnedThisWave >= EnemiesToSpawnThisWave)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 		return;
@@ -69,13 +83,42 @@ void AModengEnemySpawner::SpawnEnemy()
 	AModengEnemy* SpawnedEnemy = GetWorld()->SpawnActor<AModengEnemy>(EnemyClass, SpawnLocation, SpawnRotation, SpawnParams);
 	if (SpawnedEnemy)
 	{
-		SpawnedCount++;
+		EnemiesSpawnedThisWave++;
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, TEXT("Enemy spawned"));
+			const FString Message = FString::Printf(TEXT("Wave %d enemy spawned (%d/%d)"), CurrentWave, EnemiesSpawnedThisWave, EnemiesToSpawnThisWave);
+			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, Message);
 		}
 	}
+}
+
+void AModengEnemySpawner::StartNextWave()
+{
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	CurrentWave++;
+	if (CurrentWave > TotalWaves)
+	{
+		EndGame(true);
+		return;
+	}
+
+	EnemiesSpawnedThisWave = 0;
+	EnemiesToSpawnThisWave = BaseEnemiesPerWave + ExtraEnemiesPerWave * (CurrentWave - 1);
+	bWaveActive = true;
+
+	if (GEngine)
+	{
+		const FString Message = FString::Printf(TEXT("Wave %d started: %d enemies"), CurrentWave, EnemiesToSpawnThisWave);
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Message);
+	}
+
+	SpawnEnemy();
+	GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &AModengEnemySpawner::SpawnEnemy, SpawnInterval, true);
 }
 
 int32 AModengEnemySpawner::CountAliveEnemies() const
@@ -120,4 +163,78 @@ bool AModengEnemySpawner::TryFindSpawnLocation(FVector& OutSpawnLocation) const
 	}
 
 	return false;
+}
+
+bool AModengEnemySpawner::AreAllLanternsExtinguished() const
+{
+	bool bFoundLantern = false;
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		const AModengLantern* Lantern = *It;
+		if (!Lantern)
+		{
+			continue;
+		}
+
+		bFoundLantern = true;
+		if (!Lantern->IsExtinguished())
+		{
+			return false;
+		}
+	}
+
+	return bFoundLantern;
+}
+
+void AModengEnemySpawner::CheckWaveProgress()
+{
+	if (!bWaveActive)
+	{
+		return;
+	}
+
+	if (EnemiesSpawnedThisWave < EnemiesToSpawnThisWave)
+	{
+		return;
+	}
+
+	if (CountAliveEnemies() > 0)
+	{
+		return;
+	}
+
+	bWaveActive = false;
+	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
+
+	if (CurrentWave >= TotalWaves)
+	{
+		EndGame(true);
+		return;
+	}
+
+	if (GEngine)
+	{
+		const FString Message = FString::Printf(TEXT("Wave %d cleared"), CurrentWave);
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green, Message);
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(NextWaveTimer, this, &AModengEnemySpawner::StartNextWave, DelayBetweenWaves, false);
+}
+
+void AModengEnemySpawner::EndGame(bool bPlayerWon)
+{
+	if (bGameEnded)
+	{
+		return;
+	}
+
+	bGameEnded = true;
+	bWaveActive = false;
+	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
+	GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 8.0f, bPlayerWon ? FColor::Green : FColor::Red, bPlayerWon ? TEXT("Victory: all waves cleared") : TEXT("Defeat: all lanterns extinguished"));
+	}
 }
