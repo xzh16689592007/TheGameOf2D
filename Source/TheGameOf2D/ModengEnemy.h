@@ -8,6 +8,8 @@
 
 class AModengLantern;
 class ASideScrollingCharacter;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UStaticMeshComponent;
 
 UCLASS()
@@ -24,6 +26,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
 	UStaticMeshComponent* EnemyBody;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> EnemyBodyMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 60.0f;
@@ -49,6 +54,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Reward", meta = (ClampMin = "0"))
 	int32 InkReward = 1;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FVector EnemyBodyScale = FVector(0.8f, 0.8f, 1.5f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FLinearColor EnemyBodyColor = FLinearColor(0.25f, 0.12f, 0.36f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FLinearColor HitFlashColor = FLinearColor(1.0f, 0.95f, 0.7f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual", meta = (ClampMin = "0.01"))
+	float HitFlashDuration = 0.08f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Debug")
 	bool bShowGameplayDebugMessages = false;
 
@@ -60,12 +77,17 @@ protected:
 
 	float TimeUntilNextAttack = 0.0f;
 	float TimeUntilRetarget = 0.0f;
+	FTimerHandle HitFlashTimer;
 	bool bIsDead = false;
 
 	virtual void FindTargetLantern();
 	virtual void MoveTowardTarget(float DeltaSeconds);
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
+	void ConfigureEnemyVisuals();
+	void SetEnemyBodyColor(const FLinearColor& Color);
+	void FlashHit();
+	void RestoreBodyColor();
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")

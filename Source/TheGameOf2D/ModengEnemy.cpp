@@ -10,8 +10,11 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "ModengLantern.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 AModengEnemy::AModengEnemy()
@@ -27,13 +30,20 @@ AModengEnemy::AModengEnemy()
 	EnemyBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EnemyBody"));
 	EnemyBody->SetupAttachment(RootComponent);
 	EnemyBody->SetRelativeLocation(FVector(0.0f, 0.0f, 10.0f));
-	EnemyBody->SetRelativeScale3D(FVector(0.8f, 0.8f, 1.5f));
+	EnemyBody->SetRelativeScale3D(EnemyBodyScale);
 	EnemyBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EnemyBody->SetCastShadow(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh.Succeeded())
 	{
 		EnemyBody->SetStaticMesh(CubeMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (BasicMaterial.Succeeded())
+	{
+		EnemyBody->SetMaterial(0, BasicMaterial.Object);
 	}
 
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
@@ -51,6 +61,7 @@ void AModengEnemy::BeginPlay()
 
 	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+	ConfigureEnemyVisuals();
 	FindTargetLantern();
 }
 
@@ -164,7 +175,10 @@ void AModengEnemy::ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacte
 	if (CurrentHealth <= 0.0f)
 	{
 		Die();
+		return;
 	}
+
+	FlashHit();
 }
 
 float AModengEnemy::GetHealthPercent() const
@@ -185,6 +199,7 @@ bool AModengEnemy::IsDead() const
 void AModengEnemy::Die()
 {
 	bIsDead = true;
+	GetWorld()->GetTimerManager().ClearTimer(HitFlashTimer);
 
 	if (LastDamagingPlayer)
 	{
@@ -198,4 +213,43 @@ void AModengEnemy::Die()
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Enemy defeated"));
 	}
+}
+
+void AModengEnemy::ConfigureEnemyVisuals()
+{
+	if (!EnemyBody)
+	{
+		return;
+	}
+
+	EnemyBody->SetRelativeScale3D(EnemyBodyScale);
+
+	UMaterialInterface* BaseMaterial = EnemyBody->GetMaterial(0);
+	if (BaseMaterial)
+	{
+		EnemyBodyMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		EnemyBody->SetMaterial(0, EnemyBodyMaterial);
+	}
+
+	SetEnemyBodyColor(EnemyBodyColor);
+}
+
+void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)
+{
+	if (EnemyBodyMaterial)
+	{
+		EnemyBodyMaterial->SetVectorParameterValue(TEXT("Color"), Color);
+	}
+}
+
+void AModengEnemy::FlashHit()
+{
+	SetEnemyBodyColor(HitFlashColor);
+	GetWorld()->GetTimerManager().ClearTimer(HitFlashTimer);
+	GetWorld()->GetTimerManager().SetTimer(HitFlashTimer, this, &AModengEnemy::RestoreBodyColor, HitFlashDuration, false);
+}
+
+void AModengEnemy::RestoreBodyColor()
+{
+	SetEnemyBodyColor(EnemyBodyColor);
 }
