@@ -66,7 +66,10 @@
   - Has health and ink reward.
   - Enemy collision is query/overlap only, so enemies do not physically block player or each other.
   - Has `EnemyBody` as a `UStaticMeshComponent` for current visuals.
-  - `BP_ModengEnemy` currently uses `SM_Stickman` on `EnemyBody`.
+  - Uses inherited `ACharacter::Mesh` for animated skeletal visuals when available.
+  - C++ default skeletal visuals load `SK_Stickman` and `ABP_Stickman`.
+  - `EnemyBody` remains as a static mesh fallback and is hidden when skeletal visuals are enabled.
+  - `BP_ModengEnemy` previously used `SM_Stickman` on `EnemyBody`; C++ now prefers the skeletal Stickman setup at runtime.
   - C++ supports optional material color override and hit flash for placeholder visuals. For imported art, keep `bOverrideBodyMaterialColor` false so the model keeps its own material.
 
 - `AModengFastEnemy`
@@ -75,7 +78,7 @@
     - `Source/TheGameOf2D/ModengFastEnemy.cpp`
   - Inherits `AModengEnemy`.
   - Faster, lower health, faster attack interval.
-  - Currently still uses placeholder visual defaults unless its Blueprint is updated.
+  - Currently keeps placeholder/static visual defaults; `bUseSkeletalMeshVisuals` is disabled in C++ until it gets a distinct animated setup.
 
 - `AModengExploderEnemy`
   - Files:
@@ -84,7 +87,7 @@
   - Inherits `AModengEnemy`.
   - Overrides attack behavior.
   - Bursts near lantern, deals larger damage, then dies.
-  - Currently still uses placeholder visual defaults unless its Blueprint is updated.
+  - Currently keeps placeholder/static visual defaults; `bUseSkeletalMeshVisuals` is disabled in C++ until it gets a distinct animated setup.
 
 - `AModengEnemySpawner`
   - Files:
@@ -145,13 +148,13 @@
   - `EnemyBody.StaticMesh = SM_Stickman`.
   - `EnemyBody` transform was adjusted so the Stickman stands on the ground.
   - `EnemyBody` material was changed to a Stickman material instance, so it no longer appears white.
-- The current enemy Stickman is still used as a static mesh, so it does not play idle/walk/attack animations yet.
-- `SK_Stickman` and `ABP_Stickman` are present and ready for the next upgrade step.
-- Recommended next visual upgrade:
-  - Add/enable a skeletal mesh component for enemies, or use the inherited `ACharacter::Mesh`.
-  - Assign `SK_Stickman`.
-  - Assign `ABP_Stickman`.
-  - Hide or remove the static `EnemyBody` once skeletal visuals are working.
+- Basic enemy skeletal animation upgrade has started in C++:
+  - `AModengEnemy` uses the inherited `ACharacter::Mesh` component.
+  - Default skeletal mesh is `SK_Stickman`.
+  - Default animation blueprint is `ABP_Stickman`.
+  - Collision remains on the capsule, not the mesh.
+  - Static `EnemyBody` is retained as a fallback and hidden when skeletal visuals are active.
+- Fast and exploder enemies still need distinct model/animation setup.
 
 ## Build Commands
 
@@ -241,7 +244,7 @@ git lfs pull
 
 ## Known Issues / Rough Edges
 
-- Basic enemy has been visually swapped to the imported Stickman static mesh, but it is not animated yet.
+- Basic enemy now has C++ skeletal Stickman defaults, but it still needs in-editor visual QA for scale, facing direction, idle/walk transition behavior, and attack/death animation hooks.
 - Fast and exploder enemies still need their own distinct model/animation setup.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
@@ -251,17 +254,16 @@ git lfs pull
 
 ## Suggested Next Steps
 
-1. Commit/push the current Stickman asset integration if not already done:
-   - `Content/ROG_Creatures/**`
-   - `Content/MoDeng/Blueprints/BP_ModengEnemy.uasset`
-   - C++ material override changes in `AModengEnemy`
-   - This updated `PROJECT_HANDOFF.md`
+1. Open UE and visually QA the basic enemy skeletal Stickman:
+   - Confirm scale and ground contact.
+   - Confirm facing direction while moving left/right.
+   - Confirm `ABP_Stickman` plays idle/walk as expected.
+   - Adjust `EnemyMeshRelativeLocation`, `EnemyMeshRelativeRotation`, or `EnemyMeshScale` in `BP_ModengEnemy` if needed.
 
-2. Upgrade enemies from static Stickman mesh to animated skeletal visuals:
-   - Use `SK_Stickman`.
-   - Use `ABP_Stickman`.
-   - Start with `BP_ModengEnemy`.
-   - Keep collision on the capsule, not on the mesh.
+2. Add enemy animation events/states:
+   - Attack animation or montage when damaging lanterns.
+   - Hit reaction when damaged.
+   - Death animation before destroy.
 
 3. Add enemy health bars:
    - C++ `UWidgetComponent` on enemies.

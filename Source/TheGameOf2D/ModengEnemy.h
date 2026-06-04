@@ -8,8 +8,10 @@
 
 class AModengLantern;
 class ASideScrollingCharacter;
+class UAnimInstance;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class USkeletalMesh;
 class UStaticMeshComponent;
 
 UCLASS()
@@ -29,6 +31,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> EnemyBodyMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> EnemyMeshMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 60.0f;
@@ -56,6 +61,24 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	FVector EnemyBodyScale = FVector(0.8f, 0.8f, 1.5f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	bool bUseSkeletalMeshVisuals = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	TObjectPtr<USkeletalMesh> EnemySkeletalMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	TSubclassOf<UAnimInstance> EnemyAnimClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FVector EnemyMeshRelativeLocation = FVector(0.0f, 0.0f, -75.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FRotator EnemyMeshRelativeRotation = FRotator(0.0f, -90.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FVector EnemyMeshScale = FVector(1.0f, 1.0f, 1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	FLinearColor EnemyBodyColor = FLinearColor(0.25f, 0.12f, 0.36f);

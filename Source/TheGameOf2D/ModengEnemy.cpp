@@ -4,8 +4,12 @@
 #include "ModengEnemy.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/MeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Animation/AnimInstance.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -44,6 +48,24 @@ AModengEnemy::AModengEnemy()
 	if (BasicMaterial.Succeeded())
 	{
 		EnemyBody->SetMaterial(0, BasicMaterial.Object);
+	}
+
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->SetGenerateOverlapEvents(false);
+	GetMesh()->SetCastShadow(true);
+
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> StickmanMesh(TEXT("/Game/ROG_Creatures/Stickman/Meshes/SK_Stickman.SK_Stickman"));
+	if (StickmanMesh.Succeeded())
+	{
+		EnemySkeletalMesh = StickmanMesh.Object;
+		GetMesh()->SetSkeletalMesh(EnemySkeletalMesh);
+	}
+
+	static ConstructorHelpers::FClassFinder<UAnimInstance> StickmanAnimClass(TEXT("/Game/ROG_Creatures/Stickman/Animations/ABP_Stickman"));
+	if (StickmanAnimClass.Succeeded())
+	{
+		EnemyAnimClass = StickmanAnimClass.Class;
+		GetMesh()->SetAnimInstanceClass(EnemyAnimClass);
 	}
 
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
@@ -223,14 +245,54 @@ void AModengEnemy::ConfigureEnemyVisuals()
 	}
 
 	EnemyBody->SetRelativeScale3D(EnemyBodyScale);
+	EnemyBodyMaterial = nullptr;
+	EnemyMeshMaterial = nullptr;
 
-	UMaterialInterface* BaseMaterial = EnemyBody->GetMaterial(0);
-	if (bOverrideBodyMaterialColor && BaseMaterial)
+	const bool bHasSkeletalVisual = bUseSkeletalMeshVisuals && EnemySkeletalMesh && GetMesh();
+	if (bHasSkeletalVisual)
 	{
-		EnemyBodyMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-		EnemyBody->SetMaterial(0, EnemyBodyMaterial);
-		SetEnemyBodyColor(EnemyBodyColor);
+		GetMesh()->SetHiddenInGame(false);
+		GetMesh()->SetVisibility(true);
+		GetMesh()->SetSkeletalMesh(EnemySkeletalMesh);
+		GetMesh()->SetAnimInstanceClass(EnemyAnimClass);
+		GetMesh()->SetRelativeLocation(EnemyMeshRelativeLocation);
+		GetMesh()->SetRelativeRotation(EnemyMeshRelativeRotation);
+		GetMesh()->SetRelativeScale3D(EnemyMeshScale);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		EnemyBody->SetHiddenInGame(true);
+		EnemyBody->SetVisibility(false);
 	}
+	else if (GetMesh())
+	{
+		GetMesh()->SetHiddenInGame(true);
+		GetMesh()->SetVisibility(false);
+		EnemyBody->SetHiddenInGame(false);
+		EnemyBody->SetVisibility(true);
+	}
+
+	UMeshComponent* VisualMesh = bHasSkeletalVisual ? Cast<UMeshComponent>(GetMesh()) : Cast<UMeshComponent>(EnemyBody);
+	if (!bOverrideBodyMaterialColor || !VisualMesh)
+	{
+		return;
+	}
+
+	UMaterialInterface* BaseMaterial = VisualMesh->GetMaterial(0);
+	if (!BaseMaterial)
+	{
+		return;
+	}
+
+	UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+	VisualMesh->SetMaterial(0, DynamicMaterial);
+	if (bHasSkeletalVisual)
+	{
+		EnemyMeshMaterial = DynamicMaterial;
+	}
+	else
+	{
+		EnemyBodyMaterial = DynamicMaterial;
+	}
+	SetEnemyBodyColor(EnemyBodyColor);
 }
 
 void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)
@@ -238,6 +300,11 @@ void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)
 	if (EnemyBodyMaterial)
 	{
 		EnemyBodyMaterial->SetVectorParameterValue(TEXT("Color"), Color);
+	}
+
+	if (EnemyMeshMaterial)
+	{
+		EnemyMeshMaterial->SetVectorParameterValue(TEXT("Color"), Color);
 	}
 }
 

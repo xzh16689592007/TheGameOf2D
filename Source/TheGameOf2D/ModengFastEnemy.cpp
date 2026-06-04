@@ -14,4 +14,5 @@ AModengFastEnemy::AModengFastEnemy()
 	EnemyBodyScale = FVector(0.55f, 0.55f, 1.15f);
 	EnemyBodyColor = FLinearColor(0.08f, 0.16f, 0.36f);
 	bOverrideBodyMaterialColor = true;
+	bUseSkeletalMeshVisuals = false;
 }
