@@ -4,8 +4,14 @@
 #include "SideScrollingGameMode.h"
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/UserWidget.h"
+#include "ModengHUD.h"
 #include "SideScrollingUI.h"
 #include "SideScrollingPickup.h"
+
+ASideScrollingGameMode::ASideScrollingGameMode()
+{
+	HUDClass = AModengHUD::StaticClass();
+}
 
 void ASideScrollingGameMode::BeginPlay()
 {

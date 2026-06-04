@@ -39,6 +39,8 @@ protected:
 
 public:
 
+	ASideScrollingGameMode();
+
 	/** Receives an interaction event from another actor */
 	virtual void ProcessPickup();
 };

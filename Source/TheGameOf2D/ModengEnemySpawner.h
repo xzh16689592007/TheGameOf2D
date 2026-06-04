@@ -16,6 +16,21 @@ class THEGAMEOF2D_API AModengEnemySpawner : public AActor
 public:
 	AModengEnemySpawner();
 
+	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
+	int32 GetCurrentWave() const { return CurrentWave; }
+
+	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
+	int32 GetTotalWaves() const { return TotalWaves; }
+
+	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
+	int32 GetEnemiesSpawnedThisWave() const { return EnemiesSpawnedThisWave; }
+
+	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
+	int32 GetEnemiesToSpawnThisWave() const { return EnemiesToSpawnThisWave; }
+
+	UFUNCTION(BlueprintPure, Category = "Spawner|Wave")
+	bool HasGameEnded() const { return bGameEnded; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
