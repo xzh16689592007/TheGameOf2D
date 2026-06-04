@@ -8,6 +8,8 @@
 
 class UCameraComponent;
 class UInputAction;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UStaticMeshComponent;
 struct FInputActionValue;
 
@@ -25,6 +27,9 @@ class ASideScrollingCharacter : public ACharacter
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Combat", meta = (AllowPrivateAccess = "true"))
 	UStaticMeshComponent* AttackVisual;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> AttackVisualMaterial;
 
 protected:
 
@@ -69,6 +74,21 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.01"))
 	float AttackVisualDuration = 0.12f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "1.0"))
+	float AttackVisualThickness = 18.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "1.0"))
+	float AttackVisualDepth = 12.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	float AttackVisualZOffset = 48.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	FLinearColor AttackVisualColor = FLinearColor(1.0f, 0.55f, 0.08f, 0.9f);
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
+	float AttackKnockbackDistance = 30.0f;
 
 	/** Extra damage gained for each weapon level after level 1 */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
@@ -156,6 +176,9 @@ public:
 
 protected:
 
+	/** Gameplay initialization */
+	virtual void BeginPlay() override;
+
 	/** Gameplay cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
@@ -238,6 +261,7 @@ protected:
 	void ResetWallJump();
 
 	void TryUpgradeWeapon();
+	void ConfigureAttackVisualMaterial();
 	void ShowAttackVisual(float FacingSign);
 	void HideAttackVisual();
 

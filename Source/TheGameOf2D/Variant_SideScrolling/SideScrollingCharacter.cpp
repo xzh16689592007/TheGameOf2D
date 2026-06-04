@@ -15,6 +15,8 @@
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "ModengEnemy.h"
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -36,11 +38,18 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	AttackVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	AttackVisual->SetHiddenInGame(true);
 	AttackVisual->SetVisibility(false);
+	AttackVisual->SetCastShadow(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMesh.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (CylinderMesh.Succeeded())
 	{
-		AttackVisual->SetStaticMesh(CubeMesh.Object);
+		AttackVisual->SetStaticMesh(CylinderMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (BasicMaterial.Succeeded())
+	{
+		AttackVisual->SetMaterial(0, BasicMaterial.Object);
 	}
 
 	// configure the collision capsule
@@ -76,6 +85,13 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 
 	// enable double jump and coyote time
 	JumpMaxCount = 3;
+}
+
+void ASideScrollingCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ConfigureAttackVisualMaterial();
 }
 
 void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -299,6 +315,10 @@ void ASideScrollingCharacter::DoAttack()
 	if (ClosestEnemy)
 	{
 		ClosestEnemy->ApplyDamageToEnemy(GetCurrentAttackDamage(), this);
+		if (!ClosestEnemy->IsDead())
+		{
+			ClosestEnemy->AddActorWorldOffset(FVector(FacingSign * AttackKnockbackDistance, 0.0f, 0.0f), false);
+		}
 
 		if (bShowGameplayDebugMessages && GEngine)
 		{
@@ -314,6 +334,27 @@ void ASideScrollingCharacter::DoAttack()
 	}
 }
 
+void ASideScrollingCharacter::ConfigureAttackVisualMaterial()
+{
+	if (!AttackVisual || AttackVisual->GetNumMaterials() <= 0)
+	{
+		return;
+	}
+
+	UMaterialInterface* BaseMaterial = AttackVisual->GetMaterial(0);
+	if (!BaseMaterial)
+	{
+		return;
+	}
+
+	AttackVisualMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+	if (AttackVisualMaterial)
+	{
+		AttackVisualMaterial->SetVectorParameterValue(TEXT("Color"), AttackVisualColor);
+		AttackVisual->SetMaterial(0, AttackVisualMaterial);
+	}
+}
+
 void ASideScrollingCharacter::ShowAttackVisual(float FacingSign)
 {
 	if (!AttackVisual)
@@ -322,10 +363,13 @@ void ASideScrollingCharacter::ShowAttackVisual(float FacingSign)
 	}
 
 	const float CurrentRange = GetCurrentAttackRange();
-	const float CurrentRadius = GetCurrentAttackRadius();
-	AttackVisual->SetWorldLocation(GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, 45.0f));
-	AttackVisual->SetWorldRotation(FRotator::ZeroRotator);
-	AttackVisual->SetWorldScale3D(FVector(CurrentRange / 100.0f, CurrentRadius * 2.0f / 100.0f, CurrentRadius * 2.0f / 100.0f));
+	AttackVisual->SetWorldLocation(GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, AttackVisualZOffset));
+	AttackVisual->SetWorldRotation(FRotator(0.0f, 0.0f, 90.0f));
+	AttackVisual->SetWorldScale3D(FVector(CurrentRange / 100.0f, AttackVisualDepth / 100.0f, AttackVisualThickness / 100.0f));
+	if (AttackVisualMaterial)
+	{
+		AttackVisualMaterial->SetVectorParameterValue(TEXT("Color"), AttackVisualColor);
+	}
 	AttackVisual->SetHiddenInGame(false);
 	AttackVisual->SetVisibility(true);
 
