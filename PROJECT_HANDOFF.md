@@ -68,6 +68,11 @@
   - Has `EnemyBody` as a `UStaticMeshComponent` for current visuals.
   - Uses inherited `ACharacter::Mesh` for animated skeletal visuals when available.
   - C++ default skeletal visuals load `SK_Stickman` and `ABP_Stickman`.
+  - C++ default animation hooks load Stickman idle, walk, attack, hit, and death animation sequences.
+  - C++ can directly drive idle/walk looping animations with `bUseDirectLocomotionAnimations`, which avoids relying on the animation blueprint receiving movement speed from manual `SetActorLocation` movement.
+  - Attacking a lantern temporarily plays the attack animation sequence, then restores the animation blueprint.
+  - Taking non-lethal damage plays a hit animation and still updates the health bar.
+  - Dying plays the death animation sequence, disables collision immediately, then destroys after the animation/delay.
   - `EnemyBody` remains as a static mesh fallback and is hidden when skeletal visuals are enabled.
   - `BP_ModengEnemy` previously used `SM_Stickman` on `EnemyBody`; C++ now prefers the skeletal Stickman setup at runtime.
   - C++ supports optional material color override and hit flash for placeholder visuals. For imported art, keep `bOverrideBodyMaterialColor` false so the model keeps its own material.
@@ -152,6 +157,11 @@
   - `AModengEnemy` uses the inherited `ACharacter::Mesh` component.
   - Default skeletal mesh is `SK_Stickman`.
   - Default animation blueprint is `ABP_Stickman`.
+  - Default idle animation is `A_Stickman_Idle`.
+  - Default walk animation is `A_Stickman_Walk`.
+  - Default attack animation is `A_Stickman_Attack_01`.
+  - Default hit/knockback animation is `A_Stickman_hit_back`.
+  - Default death animation is `A_Stickman_Death`.
   - Collision remains on the capsule, not the mesh.
   - Static `EnemyBody` is retained as a fallback and hidden when skeletal visuals are active.
 - Fast and exploder enemies still need distinct model/animation setup.
@@ -244,7 +254,7 @@ git lfs pull
 
 ## Known Issues / Rough Edges
 
-- Basic enemy now has C++ skeletal Stickman defaults, but it still needs in-editor visual QA for scale, facing direction, idle/walk transition behavior, and attack/death animation hooks.
+- Basic enemy now has C++ skeletal Stickman defaults and direct idle/walk/attack/hit/death animation sequence hooks, but it still needs in-editor visual QA for timing, scale, facing direction, and transitions between looping and one-shot animations.
 - Fast and exploder enemies still need their own distinct model/animation setup.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
@@ -257,13 +267,13 @@ git lfs pull
 1. Open UE and visually QA the basic enemy skeletal Stickman:
    - Confirm scale and ground contact.
    - Confirm facing direction while moving left/right.
-   - Confirm `ABP_Stickman` plays idle/walk as expected.
+   - Confirm direct `A_Stickman_Idle` / `A_Stickman_Walk` loops play as expected.
    - Adjust `EnemyMeshRelativeLocation`, `EnemyMeshRelativeRotation`, or `EnemyMeshScale` in `BP_ModengEnemy` if needed.
 
-2. Add enemy animation events/states:
-   - Attack animation or montage when damaging lanterns.
-   - Hit reaction when damaged.
-   - Death animation before destroy.
+2. Polish enemy animation events/states:
+   - Verify attack/hit/death sequences visibly play and return to direct idle/walk loops afterward.
+   - Add better attack timing later if needed, e.g. damage on animation notify instead of attack start.
+   - Add variant animations or distinct appearances for fast and exploder enemies.
 
 3. Add enemy health bars:
    - C++ `UWidgetComponent` on enemies.

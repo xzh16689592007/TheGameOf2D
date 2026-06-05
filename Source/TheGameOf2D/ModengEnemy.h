@@ -9,6 +9,7 @@
 class AModengLantern;
 class ASideScrollingCharacter;
 class UAnimInstance;
+class UAnimSequenceBase;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UModengEnemyHealthWidget;
@@ -100,6 +101,36 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	bool bOverrideBodyMaterialColor = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	TObjectPtr<UAnimSequenceBase> AttackAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	TObjectPtr<UAnimSequenceBase> IdleAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	TObjectPtr<UAnimSequenceBase> WalkAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	TObjectPtr<UAnimSequenceBase> HitAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	TObjectPtr<UAnimSequenceBase> DeathAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation", meta = (ClampMin = "0.1"))
+	float AttackAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation", meta = (ClampMin = "0.1"))
+	float HitAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation", meta = (ClampMin = "0.1"))
+	float DeathAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation", meta = (ClampMin = "0.0"))
+	float DeathDestroyDelay = 1.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Animation")
+	bool bUseDirectLocomotionAnimations = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Health Bar")
 	bool bShowHealthBarOnlyAfterDamage = true;
 
@@ -128,7 +159,13 @@ protected:
 	float TimeUntilRetarget = 0.0f;
 	FTimerHandle HitFlashTimer;
 	FTimerHandle HealthBarHideTimer;
+	FTimerHandle ResumeAnimationTimer;
+	FTimerHandle DeathDestroyTimer;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> CurrentLoopingAnimation = nullptr;
 	bool bIsDead = false;
+	bool bOneShotAnimationActive = false;
+	bool bWantsWalkAnimation = false;
 
 	virtual void FindTargetLantern();
 	virtual void MoveTowardTarget(float DeltaSeconds);
@@ -142,6 +179,14 @@ protected:
 	void UpdateHealthBar();
 	void ShowHealthBar();
 	void HideHealthBar();
+	void PlayAttackAnimation();
+	void PlayHitAnimation();
+	float PlayDeathAnimation();
+	float PlayOneShotAnimation(UAnimSequenceBase* Animation, float PlayRate, bool bResumeAnimationBlueprint);
+	void UpdateLocomotionAnimation(bool bMoving);
+	void PlayLoopingAnimation(UAnimSequenceBase* Animation);
+	void ResumeLocomotionAnimation();
+	void FinishDeath();
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")

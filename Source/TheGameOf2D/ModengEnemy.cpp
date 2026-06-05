@@ -4,6 +4,7 @@
 #include "ModengEnemy.h"
 
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSequenceBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -80,6 +81,36 @@ AModengEnemy::AModengEnemy()
 		GetMesh()->SetAnimInstanceClass(EnemyAnimClass);
 	}
 
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanAttackAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Attack_01.A_Stickman_Attack_01"));
+	if (StickmanAttackAnimation.Succeeded())
+	{
+		AttackAnimation = StickmanAttackAnimation.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanIdleAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Idle.A_Stickman_Idle"));
+	if (StickmanIdleAnimation.Succeeded())
+	{
+		IdleAnimation = StickmanIdleAnimation.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanWalkAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Walk.A_Stickman_Walk"));
+	if (StickmanWalkAnimation.Succeeded())
+	{
+		WalkAnimation = StickmanWalkAnimation.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanHitAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_hit_back.A_Stickman_hit_back"));
+	if (StickmanHitAnimation.Succeeded())
+	{
+		HitAnimation = StickmanHitAnimation.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanDeathAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Death.A_Stickman_Death"));
+	if (StickmanDeathAnimation.Succeeded())
+	{
+		DeathAnimation = StickmanDeathAnimation.Object;
+	}
+
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 	GetCharacterMovement()->GravityScale = 0.0f;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
@@ -97,6 +128,7 @@ void AModengEnemy::BeginPlay()
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 	ConfigureEnemyVisuals();
 	InitializeHealthBar();
+	UpdateLocomotionAnimation(false);
 	FindTargetLantern();
 }
 
@@ -127,6 +159,7 @@ void AModengEnemy::Tick(float DeltaSeconds)
 	}
 	else
 	{
+		UpdateLocomotionAnimation(false);
 		AttackTarget(DeltaSeconds);
 	}
 }
@@ -170,6 +203,7 @@ void AModengEnemy::MoveTowardTarget(float DeltaSeconds)
 	const FVector NewLocation = GetActorLocation() + FVector(DirectionX * MoveSpeed * DeltaSeconds, 0.0f, 0.0f);
 	SetActorLocation(NewLocation, false);
 	SetActorRotation(FRotator(0.0f, DirectionX > 0.0f ? 0.0f : 180.0f, 0.0f));
+	UpdateLocomotionAnimation(true);
 }
 
 void AModengEnemy::AttackTarget(float DeltaSeconds)
@@ -186,6 +220,7 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	}
 
 	TimeUntilNextAttack = AttackInterval;
+	PlayAttackAnimation();
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
 
 	if (bShowGameplayDebugMessages && GEngine)
@@ -215,6 +250,7 @@ void AModengEnemy::ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacte
 	}
 
 	FlashHit();
+	PlayHitAnimation();
 	ShowHealthBar();
 }
 
@@ -238,6 +274,8 @@ void AModengEnemy::Die()
 	bIsDead = true;
 	GetWorld()->GetTimerManager().ClearTimer(HitFlashTimer);
 	GetWorld()->GetTimerManager().ClearTimer(HealthBarHideTimer);
+	GetWorld()->GetTimerManager().ClearTimer(ResumeAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(DeathDestroyTimer);
 	HideHealthBar();
 
 	if (LastDamagingPlayer)
@@ -246,7 +284,15 @@ void AModengEnemy::Die()
 	}
 
 	SetActorEnableCollision(false);
-	Destroy();
+	const float DestroyDelay = PlayDeathAnimation();
+	if (DestroyDelay > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(DeathDestroyTimer, this, &AModengEnemy::FinishDeath, DestroyDelay, false);
+	}
+	else
+	{
+		FinishDeath();
+	}
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
@@ -405,4 +451,93 @@ void AModengEnemy::HideHealthBar()
 
 	HealthBarComponent->SetHiddenInGame(true);
 	HealthBarComponent->SetVisibility(false);
+}
+
+void AModengEnemy::PlayAttackAnimation()
+{
+	PlayOneShotAnimation(AttackAnimation, AttackAnimationPlayRate, true);
+}
+
+void AModengEnemy::PlayHitAnimation()
+{
+	PlayOneShotAnimation(HitAnimation, HitAnimationPlayRate, true);
+}
+
+float AModengEnemy::PlayDeathAnimation()
+{
+	const float AnimationDuration = PlayOneShotAnimation(DeathAnimation, DeathAnimationPlayRate, false);
+	return AnimationDuration > 0.0f ? AnimationDuration : DeathDestroyDelay;
+}
+
+float AModengEnemy::PlayOneShotAnimation(UAnimSequenceBase* Animation, float PlayRate, bool bResumeAnimationBlueprint)
+{
+	if (!bUseSkeletalMeshVisuals || !Animation || !GetMesh())
+	{
+		return 0.0f;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(ResumeAnimationTimer);
+
+	bOneShotAnimationActive = true;
+	GetMesh()->PlayAnimation(Animation, false);
+
+	const float SafePlayRate = FMath::Max(PlayRate, 0.1f);
+	GetMesh()->GlobalAnimRateScale = SafePlayRate;
+	const float Duration = Animation->GetPlayLength() / SafePlayRate;
+
+	if (bResumeAnimationBlueprint && Duration > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(ResumeAnimationTimer, this, &AModengEnemy::ResumeLocomotionAnimation, Duration, false);
+	}
+
+	return Duration;
+}
+
+void AModengEnemy::UpdateLocomotionAnimation(bool bMoving)
+{
+	bWantsWalkAnimation = bMoving;
+	if (bOneShotAnimationActive || bIsDead)
+	{
+		return;
+	}
+
+	if (bUseDirectLocomotionAnimations)
+	{
+		PlayLoopingAnimation(bMoving ? WalkAnimation : IdleAnimation);
+	}
+	else if (GetMesh())
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(EnemyAnimClass);
+	}
+}
+
+void AModengEnemy::PlayLoopingAnimation(UAnimSequenceBase* Animation)
+{
+	if (!bUseSkeletalMeshVisuals || !Animation || !GetMesh() || CurrentLoopingAnimation == Animation)
+	{
+		return;
+	}
+
+	CurrentLoopingAnimation = Animation;
+	GetMesh()->GlobalAnimRateScale = 1.0f;
+	GetMesh()->PlayAnimation(Animation, true);
+}
+
+void AModengEnemy::ResumeLocomotionAnimation()
+{
+	if (!GetMesh())
+	{
+		return;
+	}
+
+	bOneShotAnimationActive = false;
+	GetMesh()->GlobalAnimRateScale = 1.0f;
+	CurrentLoopingAnimation = nullptr;
+	UpdateLocomotionAnimation(bWantsWalkAnimation);
+}
+
+void AModengEnemy::FinishDeath()
+{
+	Destroy();
 }
