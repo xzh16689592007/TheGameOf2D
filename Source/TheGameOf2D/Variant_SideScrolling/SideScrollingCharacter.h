@@ -7,9 +7,12 @@
 #include "SideScrollingCharacter.generated.h"
 
 class UCameraComponent;
+class UAnimInstance;
+class UAnimSequenceBase;
 class UInputAction;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class USkeletalMesh;
 class UStaticMeshComponent;
 struct FInputActionValue;
 
@@ -71,6 +74,45 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
 	bool bShowGameplayDebugMessages = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	TObjectPtr<USkeletalMesh> PlayerSkeletalMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	TSubclassOf<UAnimInstance> PlayerAnimClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	FVector PlayerMeshRelativeLocation = FVector(0.0f, 0.0f, -90.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	FRotator PlayerMeshRelativeRotation = FRotator(0.0f, -90.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	FVector PlayerMeshScale = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bPlayAttackAnimation = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	TObjectPtr<UAnimSequenceBase> AttackAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.1"))
+	float AttackAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bRestoreMeshTransformAfterAttackAnimation = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bMovementInterruptsAttackAnimation = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	bool bLockFacingToSideScrollingAxis = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	float FacingYawRight = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
+	float FacingYawLeft = 180.0f;
 
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.01"))
 	float AttackVisualDuration = 0.12f;
@@ -151,6 +193,9 @@ protected:
 	FTimerHandle WallJumpTimer;
 
 	FTimerHandle AttackVisualTimer;
+	FTimerHandle AttackAnimationTimer;
+
+	FTransform MeshTransformBeforeAttackAnimation;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -168,6 +213,8 @@ protected:
 
 	/** If true, this character is moving along the side scrolling axis */
 	bool bMovingHorizontally = false;
+
+	bool bAttackAnimationInProgress = false;
 
 public:
 	
@@ -261,7 +308,12 @@ protected:
 	void ResetWallJump();
 
 	void TryUpgradeWeapon();
+	void ConfigurePlayerVisuals();
 	void ConfigureAttackVisualMaterial();
+	void PlayAttackAnimation();
+	void RestorePlayerAnimationBlueprint();
+	void InterruptAttackAnimation();
+	void UpdateFacingDirection(float FacingSign);
 	void ShowAttackVisual(float FacingSign);
 	void HideAttackVisual();
 

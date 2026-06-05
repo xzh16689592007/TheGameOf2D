@@ -31,6 +31,24 @@
 
 - Main custom level: `Content/MoDeng/Maps/L_Level01_Street.umap`
 - Main custom assets folder: `Content/MoDeng`
+- Imported player character folder: `Content/SamuraiGirlTomoe`
+  - Source library path: `D:\UE素材库\2025角色集合更新\A人物\文件\aa109-Samurai-Girl-Tomoe\SamuraiGirlTomoe`
+  - Important resources:
+    - `Content/SamuraiGirlTomoe/Mesh/SK_SAMURAIGIRL_01.uasset`
+    - `Content/SamuraiGirlTomoe/Mesh/SK_SAMURAIGIRL_02.uasset`
+    - `Content/SamuraiGirlTomoe/Mesh/SKEL_Tomoe_Skeleton.uasset`
+    - `Content/SamuraiGirlTomoe/Mesh/PA_Tomoe_PhysicsAsset.uasset`
+- Imported sword combat animation folder: `Content/CombatMasterAnimBundle`
+  - Source library path: `D:\UE素材库\Combat Master Sword Combat Anims Bundle\CombatMasterAnimBundle\CombatMasterAnimBundle`
+  - Use the `IP` / `InPlace` animation folders first for this 2.5D project.
+  - Avoid `RM` / `RootMotion` animations for now because player movement is controlled by C++.
+  - Useful source attack examples:
+    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A1_IP.uasset`
+    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A2_IP.uasset`
+    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnims/InPlace/ComboAttack/Anim_DK_Combo_A01_IP.uasset`
+  - Weapon examples:
+    - `Content/CombatMasterAnimBundle/Weapon/Katana`
+    - `Content/CombatMasterAnimBundle/Weapon/Sword`
 - Imported Fab asset folder: `Content/ROG_Creatures`
   - Current imported pack: `ROG Creatures: Stickman`
   - Important resources:
@@ -135,6 +153,12 @@
     - Uses a box overlap from the player forward, not a single sphere.
     - Has a short cylinder-based slash/range visual instead of the old debug cube.
     - Applies light knockback to enemies that survive the hit.
+    - Supports a configurable `AttackAnimation` sequence, currently driven from C++ with `PlayAnimation()`.
+    - C++ records the mesh relative transform before the attack animation and restores it afterward via `bRestoreMeshTransformAfterAttackAnimation`, to reduce root/retarget offset issues.
+    - If an attack animation visually lunges or snaps, prefer a retargeted `IP`/InPlace animation and disable root motion on the animation asset.
+  - Visual setup:
+    - C++ exposes `PlayerSkeletalMesh`, `PlayerAnimClass`, mesh relative transform, and attack animation fields for Blueprint tuning.
+    - C++ defaults still load Manny/side-scroller resources as fallback, but `BP_SideScrollingCharacter` can override them.
   - Progression:
     - `AddInk()`
     - weapon level
@@ -165,6 +189,21 @@
   - Collision remains on the capsule, not the mesh.
   - Static `EnemyBody` is retained as a fallback and hidden when skeletal visuals are active.
 - Fast and exploder enemies still need distinct model/animation setup.
+- Player art upgrade is in progress:
+  - `Content/SamuraiGirlTomoe` has been copied into the project.
+  - `Content/CombatMasterAnimBundle` has been copied into the project.
+  - UE IK Retarget work has started:
+    - Source IK Rig was created for CombatMaster/Katana mannequin, named around `IKR_Combat_Katana`.
+    - Target IK Rig was created for Tomoe, named around `IKR_Tomoe`.
+    - IK Retargeter was created under `Content/MoDeng/Animations`, named around `RTG_CombatKatana_To_Tomoe`.
+    - A Tomoe attack animation was retargeted/exported under `Content/MoDeng/Animations/Tomoe/Attack`.
+  - User tested and reported Tomoe is visible in game and a retargeted attack can play.
+  - Recommended attack source to continue with: `DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A1_IP`, not root-motion variants.
+  - `BP_SideScrollingCharacter` has been edited manually in UE and now has pending `.uasset` changes.
+- Enemy health bar issue was fixed defensively in C++:
+  - Added `AModengEnemy::EnsureHealthBarWidget()`.
+  - Health bar widget class, instance, color, and percent are revalidated before initialize/update/show.
+  - User tested later waves and reported the fix works.
 
 ## Build Commands
 
@@ -218,6 +257,8 @@ Expected content:
 ## Recent Commits
 
 ```text
+91a9714 Add project README
+86c0731 Update project handoff
 8c97964 Improve basic enemy animations
 7fe7cc4 Update variant enemy blueprints
 0043235 Add enemy health bars and repair prompt
@@ -235,7 +276,9 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone: basic Stickman enemy visuals and animation feedback are working, enemy health bars and lantern repair prompt are in place, and Git proxy has been configured for Clash Verge on `127.0.0.1:7897`.
+Latest synced milestone before current uncommitted work: basic Stickman enemy visuals and animation feedback are working, enemy health bars and lantern repair prompt are in place, and Git proxy has been configured for Clash Verge on `127.0.0.1:7897`.
+
+Current uncommitted milestone: Tomoe player model and Combat Master sword animation assets have been copied into `Content`, Tomoe retargeting has started, a Tomoe attack animation has been exported and tested, and later-wave enemy health bars have been fixed in C++.
 
 ## Git Setup And Notes
 
@@ -249,6 +292,14 @@ Latest synced milestone: basic Stickman enemy visuals and animation feedback are
 - Git LFS is installed and initialized.
 - The Fab asset import under `Content/ROG_Creatures` should be committed through Git LFS.
 - `Config/DefaultEditor.ini` may get noisy editor preview-profile changes from opening imported assets. Do not commit those preview-profile changes unless the team explicitly wants editor profile settings in source control.
+- Current working tree includes asset imports and UE-generated/editor changes. Before committing, inspect:
+  - `Content/SamuraiGirlTomoe/`
+  - `Content/CombatMasterAnimBundle/`
+  - `Content/MoDeng/Animations/`
+  - `Content/Variant_SideScrolling/Blueprints/BP_SideScrollingCharacter.uasset`
+  - `Config/DefaultEngine.ini`
+  - `Config/DefaultEditor.ini` (likely noisy; avoid committing unless intentional)
+  - C++ files changed for player animation defaults and enemy health-bar widget self-healing.
 
 Team clone instructions:
 
@@ -261,10 +312,15 @@ git lfs pull
 ## Known Issues / Rough Edges
 
 - Basic enemy now has C++ skeletal Stickman defaults and direct idle/walk/attack/hit/death animation sequence hooks. User tested it in UE and reported no issues.
+- Later-wave enemy health bars previously disappeared. This was fixed by revalidating/initializing the native health widget before health-bar update/show. User reported it works.
 - Fast and exploder enemies still need their own distinct model/animation setup.
 - HUD is C++ Canvas HUD, not polished UMG.
-- Player still uses the default template character appearance.
-- Player attack has gameplay logic and range feedback, but no polished character attack animation yet.
+- Player is being migrated from default Manny/Quinn appearance to Samurai Girl Tomoe.
+- Player attack now supports a retargeted sword animation, but the animation/AnimBP setup is still rough:
+  - Prefer retargeted `IP` / InPlace attack animations.
+  - Root-motion or bad retarget choices can cause visual mesh lunges/snaps.
+  - C++ mesh-transform restoration helps but is not a substitute for clean in-place animation assets.
+  - Tomoe base locomotion still needs a proper Tomoe AnimBP or retargeted side-scroller locomotion animations.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
 - Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
 - If all lanterns are on platforms or unreachable by X-only enemies, enemies may not behave as intended.
@@ -272,26 +328,33 @@ git lfs pull
 
 ## Suggested Next Steps
 
-1. Find and import a better player character model:
-   - Prefer UE5 Manny/Quinn-compatible humanoid assets.
-   - Good search keywords: `UE5`, `Manny`, `Quinn`, `Humanoid`, `Rigged`, `Retarget`, `Animation Blueprint`.
-   - Prefer assets with idle, walk/run, jump, and attack animations.
+1. Continue Tomoe player setup:
+   - Open `BP_SideScrollingCharacter`.
+   - Confirm `CharacterMesh0` and class default `PlayerSkeletalMesh` both point to `SK_SAMURAIGIRL_01`.
+   - Confirm `AttackAnimation` points to a Tomoe-retargeted `IP` attack animation under `Content/MoDeng/Animations/Tomoe/Attack`.
+   - If the attack still lunges/snaps, retarget a different `IP` source animation or check the animation asset root-motion settings (`Enable Root Motion=false`, `Force Root Lock=true`).
+   - Run Live Coding (`Ctrl+Alt+F11`) or close UE and full-build so the latest C++ mesh-transform restoration is active.
 
-2. Replace player visual appearance:
-   - Keep existing player movement, jump, repair, and attack gameplay logic.
-   - Start by swapping only the visible skeletal mesh/animation setup.
-   - Avoid large gameplay rewrites while testing the new character art.
+2. Build a proper Tomoe locomotion setup:
+   - Retarget Tomoe idle/walk/run/jump/fall/land animations, or use the Tomoe demo animations if suitable.
+   - Create a Tomoe-compatible side-scroller AnimBP.
+   - Keep C++ movement/jump/combat logic unchanged while replacing only visual animation.
 
-3. Add player attack animation:
-   - Play an attack animation on left mouse / `J`.
-   - Keep the existing attack overlap and slash visual until animation timing is tuned.
+3. Add a visible katana/weapon:
+   - Use `CombatMasterAnimBundle` katana static mesh assets.
+   - Attach the katana to Tomoe hand socket in Blueprint after confirming hand/socket names.
+   - Keep C++ hit detection separate from weapon mesh for now.
 
-4. Later: give fast and exploder enemies distinct polished visuals:
+4. Commit carefully after testing:
+   - New `.uasset` imports are large and should go through Git LFS.
+   - Exclude noisy `Config/DefaultEditor.ini` if it only contains editor preview/profile changes.
+
+5. Later: give fast and exploder enemies distinct polished visuals:
    - Fast enemy can be smaller/lighter/faster-looking.
    - Exploder enemy can be larger/redder/more volatile-looking.
    - They currently remain acceptable placeholders because their shapes distinguish enemy types.
 
-5. Later: upgrade enemy movement beyond X-axis:
+6. Later: upgrade enemy movement beyond X-axis:
    - Route point system for platform levels.
    - Flying enemy.
    - Ranged enemy.

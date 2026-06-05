@@ -2,8 +2,11 @@
 
 
 #include "SideScrollingCharacter.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimSequenceBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
@@ -14,6 +17,7 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -52,6 +56,30 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 		AttackVisual->SetMaterial(0, BasicMaterial.Object);
 	}
 
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->SetGenerateOverlapEvents(false);
+	GetMesh()->SetCastShadow(true);
+
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MannyMesh(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
+	if (MannyMesh.Succeeded())
+	{
+		PlayerSkeletalMesh = MannyMesh.Object;
+		GetMesh()->SetSkeletalMesh(PlayerSkeletalMesh);
+	}
+
+	static ConstructorHelpers::FClassFinder<UAnimInstance> SideScrollerAnimClass(TEXT("/Game/Variant_SideScrolling/Anims/ABP_Manny_SideScroller"));
+	if (SideScrollerAnimClass.Succeeded())
+	{
+		PlayerAnimClass = SideScrollerAnimClass.Class;
+		GetMesh()->SetAnimInstanceClass(PlayerAnimClass);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> UnarmedAttackAnimation(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"));
+	if (UnarmedAttackAnimation.Succeeded())
+	{
+		AttackAnimation = UnarmedAttackAnimation.Object;
+	}
+
 	// configure the collision capsule
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
 
@@ -78,7 +106,7 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	GetCharacterMovement()->AirControl = 1.0f;
 
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 
 	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
 	GetCharacterMovement()->bConstrainToPlane = true;
@@ -91,6 +119,7 @@ void ASideScrollingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	ConfigurePlayerVisuals();
 	ConfigureAttackVisualMaterial();
 }
 
@@ -101,6 +130,7 @@ void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackVisualTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
 }
 
 void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
@@ -204,6 +234,11 @@ void ASideScrollingCharacter::DoMove(float Forward)
 		if (!FMath::IsNearlyZero(Forward))
 		{
 			LastFacingX = Forward > 0.0f ? 1.0f : -1.0f;
+			UpdateFacingDirection(LastFacingX);
+			if (bMovementInterruptsAttackAnimation)
+			{
+				InterruptAttackAnimation();
+			}
 		}
 
 		// figure out the movement direction
@@ -280,6 +315,7 @@ void ASideScrollingCharacter::DoAttack()
 	const float CurrentRadius = GetCurrentAttackRadius();
 	const FVector AttackCenter = GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, 35.0f);
 
+	PlayAttackAnimation();
 	ShowAttackVisual(FacingSign);
 
 	FCollisionShape AttackBox;
@@ -334,6 +370,34 @@ void ASideScrollingCharacter::DoAttack()
 	}
 }
 
+void ASideScrollingCharacter::ConfigurePlayerVisuals()
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	if (!CharacterMesh)
+	{
+		return;
+	}
+
+	if (PlayerSkeletalMesh)
+	{
+		CharacterMesh->SetSkeletalMesh(PlayerSkeletalMesh);
+	}
+
+	CharacterMesh->SetRelativeLocation(PlayerMeshRelativeLocation);
+	CharacterMesh->SetRelativeRotation(PlayerMeshRelativeRotation);
+	CharacterMesh->SetRelativeScale3D(PlayerMeshScale);
+	CharacterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CharacterMesh->SetGenerateOverlapEvents(false);
+	CharacterMesh->SetHiddenInGame(PlayerSkeletalMesh == nullptr);
+	CharacterMesh->SetVisibility(PlayerSkeletalMesh != nullptr);
+
+	if (PlayerAnimClass)
+	{
+		CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		CharacterMesh->SetAnimInstanceClass(PlayerAnimClass);
+	}
+}
+
 void ASideScrollingCharacter::ConfigureAttackVisualMaterial()
 {
 	if (!AttackVisual || AttackVisual->GetNumMaterials() <= 0)
@@ -353,6 +417,72 @@ void ASideScrollingCharacter::ConfigureAttackVisualMaterial()
 		AttackVisualMaterial->SetVectorParameterValue(TEXT("Color"), AttackVisualColor);
 		AttackVisual->SetMaterial(0, AttackVisualMaterial);
 	}
+}
+
+void ASideScrollingCharacter::PlayAttackAnimation()
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	if (!bPlayAttackAnimation || !AttackAnimation || !CharacterMesh)
+	{
+		return;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+
+	const float SafePlayRate = FMath::Max(AttackAnimationPlayRate, 0.1f);
+	MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	bAttackAnimationInProgress = true;
+	CharacterMesh->PlayAnimation(AttackAnimation, false);
+	CharacterMesh->GlobalAnimRateScale = SafePlayRate;
+
+	const float Duration = AttackAnimation->GetPlayLength() / SafePlayRate;
+	if (Duration > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::RestorePlayerAnimationBlueprint, Duration, false);
+	}
+}
+
+void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	if (!CharacterMesh)
+	{
+		return;
+	}
+
+	CharacterMesh->GlobalAnimRateScale = 1.0f;
+	if (bRestoreMeshTransformAfterAttackAnimation)
+	{
+		CharacterMesh->SetRelativeTransform(MeshTransformBeforeAttackAnimation);
+	}
+	bAttackAnimationInProgress = false;
+
+	if (PlayerAnimClass)
+	{
+		CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		CharacterMesh->SetAnimInstanceClass(PlayerAnimClass);
+	}
+}
+
+void ASideScrollingCharacter::InterruptAttackAnimation()
+{
+	if (!bAttackAnimationInProgress)
+	{
+		return;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	RestorePlayerAnimationBlueprint();
+}
+
+void ASideScrollingCharacter::UpdateFacingDirection(float FacingSign)
+{
+	if (!bLockFacingToSideScrollingAxis)
+	{
+		return;
+	}
+
+	SetActorRotation(FRotator(0.0f, FacingSign >= 0.0f ? FacingYawRight : FacingYawLeft, 0.0f));
 }
 
 void ASideScrollingCharacter::ShowAttackVisual(float FacingSign)

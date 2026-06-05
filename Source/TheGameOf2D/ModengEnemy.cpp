@@ -383,23 +383,43 @@ void AModengEnemy::RestoreBodyColor()
 	SetEnemyBodyColor(EnemyBodyColor);
 }
 
-void AModengEnemy::InitializeHealthBar()
+bool AModengEnemy::EnsureHealthBarWidget()
 {
 	if (!HealthBarComponent)
 	{
-		return;
+		return false;
 	}
 
 	HealthBarComponent->SetRelativeLocation(HealthBarRelativeLocation);
 	HealthBarComponent->SetDrawSize(HealthBarDrawSize);
-	HealthBarComponent->SetWidgetClass(UModengEnemyHealthWidget::StaticClass());
-	HealthBarComponent->InitWidget();
+
+	if (HealthBarComponent->GetWidgetClass() != UModengEnemyHealthWidget::StaticClass())
+	{
+		HealthBarComponent->SetWidgetClass(UModengEnemyHealthWidget::StaticClass());
+		HealthBarWidget = nullptr;
+	}
 
 	HealthBarWidget = Cast<UModengEnemyHealthWidget>(HealthBarComponent->GetUserWidgetObject());
+	if (!HealthBarWidget)
+	{
+		HealthBarComponent->InitWidget();
+		HealthBarWidget = Cast<UModengEnemyHealthWidget>(HealthBarComponent->GetUserWidgetObject());
+	}
+
 	if (HealthBarWidget)
 	{
 		HealthBarWidget->SetBarColor(HealthBarColor);
 		HealthBarWidget->SetHealthPercent(GetHealthPercent());
+	}
+
+	return HealthBarWidget != nullptr;
+}
+
+void AModengEnemy::InitializeHealthBar()
+{
+	if (!EnsureHealthBarWidget())
+	{
+		return;
 	}
 
 	if (bShowHealthBarOnlyAfterDamage)
@@ -414,15 +434,12 @@ void AModengEnemy::InitializeHealthBar()
 
 void AModengEnemy::UpdateHealthBar()
 {
-	if (!HealthBarWidget && HealthBarComponent)
+	if (!EnsureHealthBarWidget())
 	{
-		HealthBarWidget = Cast<UModengEnemyHealthWidget>(HealthBarComponent->GetUserWidgetObject());
+		return;
 	}
 
-	if (HealthBarWidget)
-	{
-		HealthBarWidget->SetHealthPercent(GetHealthPercent());
-	}
+	HealthBarWidget->SetHealthPercent(GetHealthPercent());
 }
 
 void AModengEnemy::ShowHealthBar()
@@ -432,6 +449,7 @@ void AModengEnemy::ShowHealthBar()
 		return;
 	}
 
+	EnsureHealthBarWidget();
 	HealthBarComponent->SetHiddenInGame(false);
 	HealthBarComponent->SetVisibility(true);
 

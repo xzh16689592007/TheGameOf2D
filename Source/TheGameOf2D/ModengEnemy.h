@@ -175,6 +175,7 @@ protected:
 	void SetEnemyBodyColor(const FLinearColor& Color);
 	void FlashHit();
 	void RestoreBodyColor();
+	bool EnsureHealthBarWidget();
 	void InitializeHealthBar();
 	void UpdateHealthBar();
 	void ShowHealthBar();
