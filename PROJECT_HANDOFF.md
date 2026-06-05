@@ -218,6 +218,12 @@ Expected content:
 ## Recent Commits
 
 ```text
+8c97964 Improve basic enemy animations
+7fe7cc4 Update variant enemy blueprints
+0043235 Add enemy health bars and repair prompt
+786c9bf Tune Stickman enemy appearance
+d40f040 Add skeletal enemy visual support
+2642cc0 Add Stickman enemy art
 50f2eed Differentiate enemy visuals
 5b4c2a8 Restore input after restarting from result screen
 3be1dee Improve player attack feedback
@@ -229,7 +235,7 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Note: this handoff file may be updated again in the same working session after the latest Stickman asset commit is created.
+Latest synced milestone: basic Stickman enemy visuals and animation feedback are working, enemy health bars and lantern repair prompt are in place, and Git proxy has been configured for Clash Verge on `127.0.0.1:7897`.
 
 ## Git Setup And Notes
 
@@ -254,33 +260,36 @@ git lfs pull
 
 ## Known Issues / Rough Edges
 
-- Basic enemy now has C++ skeletal Stickman defaults and direct idle/walk/attack/hit/death animation sequence hooks, but it still needs in-editor visual QA for timing, scale, facing direction, and transitions between looping and one-shot animations.
+- Basic enemy now has C++ skeletal Stickman defaults and direct idle/walk/attack/hit/death animation sequence hooks. User tested it in UE and reported no issues.
 - Fast and exploder enemies still need their own distinct model/animation setup.
 - HUD is C++ Canvas HUD, not polished UMG.
+- Player still uses the default template character appearance.
+- Player attack has gameplay logic and range feedback, but no polished character attack animation yet.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
 - Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
 - If all lanterns are on platforms or unreachable by X-only enemies, enemies may not behave as intended.
-- Current game lacks polished enemy animations, sound, particles, and UI art.
+- Current game lacks polished player art, sound, particles, and UI art.
 
 ## Suggested Next Steps
 
-1. Open UE and visually QA the basic enemy skeletal Stickman:
-   - Confirm scale and ground contact.
-   - Confirm facing direction while moving left/right.
-   - Confirm direct `A_Stickman_Idle` / `A_Stickman_Walk` loops play as expected.
-   - Adjust `EnemyMeshRelativeLocation`, `EnemyMeshRelativeRotation`, or `EnemyMeshScale` in `BP_ModengEnemy` if needed.
+1. Find and import a better player character model:
+   - Prefer UE5 Manny/Quinn-compatible humanoid assets.
+   - Good search keywords: `UE5`, `Manny`, `Quinn`, `Humanoid`, `Rigged`, `Retarget`, `Animation Blueprint`.
+   - Prefer assets with idle, walk/run, jump, and attack animations.
 
-2. Polish enemy animation events/states:
-   - Verify attack/hit/death sequences visibly play and return to direct idle/walk loops afterward.
-   - Add better attack timing later if needed, e.g. damage on animation notify instead of attack start.
-   - Add variant animations or distinct appearances for fast and exploder enemies.
+2. Replace player visual appearance:
+   - Keep existing player movement, jump, repair, and attack gameplay logic.
+   - Start by swapping only the visible skeletal mesh/animation setup.
+   - Avoid large gameplay rewrites while testing the new character art.
 
-3. Add enemy health bars:
-   - C++ `UWidgetComponent` on enemies.
-   - Hide at full health or show only after damage.
+3. Add player attack animation:
+   - Play an attack animation on left mouse / `J`.
+   - Keep the existing attack overlap and slash visual until animation timing is tuned.
 
-4. Add lantern interaction prompt:
-   - Show `E / F Repair` near damaged lanterns when player is close.
+4. Later: give fast and exploder enemies distinct polished visuals:
+   - Fast enemy can be smaller/lighter/faster-looking.
+   - Exploder enemy can be larger/redder/more volatile-looking.
+   - They currently remain acceptable placeholders because their shapes distinguish enemy types.
 
 5. Later: upgrade enemy movement beyond X-axis:
    - Route point system for platform levels.
