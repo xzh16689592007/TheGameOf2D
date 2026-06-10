@@ -17,10 +17,9 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/HitResult.h"
 #include "Engine/SkeletalMesh.h"
-#include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
+#include "Components/SceneComponent.h"
 #include "ModengEnemy.h"
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -36,25 +35,6 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	Camera->SetupAttachment(RootComponent);
 
 	Camera->SetRelativeLocationAndRotation(FVector(0.0f, 300.0f, 0.0f), FRotator(0.0f, -90.0f, 0.0f));
-
-	AttackVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackVisual"));
-	AttackVisual->SetupAttachment(RootComponent);
-	AttackVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	AttackVisual->SetHiddenInGame(true);
-	AttackVisual->SetVisibility(false);
-	AttackVisual->SetCastShadow(false);
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	if (CylinderMesh.Succeeded())
-	{
-		AttackVisual->SetStaticMesh(CylinderMesh.Object);
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
-	if (BasicMaterial.Succeeded())
-	{
-		AttackVisual->SetMaterial(0, BasicMaterial.Object);
-	}
 
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetMesh()->SetGenerateOverlapEvents(false);
@@ -120,7 +100,16 @@ void ASideScrollingCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	ConfigurePlayerVisuals();
-	ConfigureAttackVisualMaterial();
+}
+
+void ASideScrollingCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bAttackHitWindowActive)
+	{
+		UpdateAttackHitWindow();
+	}
 }
 
 void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -129,8 +118,10 @@ void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
-	GetWorld()->GetTimerManager().ClearTimer(AttackVisualTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
 }
 
 void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
@@ -310,13 +301,246 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoAttack()
 {
+	if (bBlockRepeatedAttacksUntilAnimationEnds && bAttackAnimationInProgress)
+	{
+		return;
+	}
+
 	const float FacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
+	PendingAttackFacingSign = FacingSign;
+	bAttackHitPending = true;
+	bAttackHitWindowActive = false;
+	bHasPreviousWeaponTrace = false;
+	bAttackRegisteredHit = false;
+	HitEnemiesThisAttack.Empty();
+
+	const float AttackDuration = PlayAttackAnimation();
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
+
+	if (bUseWeaponTraceForAttack && AttackDuration > 0.0f)
+	{
+		const float WindowStartRatio = FMath::Clamp(AttackHitWindowStartRatio, 0.0f, 1.0f);
+		const float WindowEndRatio = FMath::Clamp(FMath::Max(AttackHitWindowEndRatio, WindowStartRatio), 0.0f, 1.0f);
+		const float WindowStartDelay = AttackDuration * WindowStartRatio;
+		float WindowEndDelay = AttackDuration * WindowEndRatio;
+		if (WindowEndDelay <= WindowStartDelay)
+		{
+			WindowEndDelay = FMath::Min(AttackDuration, WindowStartDelay + 0.05f);
+		}
+
+		if (WindowStartDelay > 0.0f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(AttackHitWindowStartTimer, this, &ASideScrollingCharacter::BeginAttackHitWindow, WindowStartDelay, false);
+		}
+		else
+		{
+			BeginAttackHitWindow();
+		}
+
+		GetWorld()->GetTimerManager().SetTimer(AttackHitWindowEndTimer, this, &ASideScrollingCharacter::EndAttackHitWindow, WindowEndDelay, false);
+	}
+	else
+	{
+		const float HitDelay = AttackDuration > 0.0f ? AttackDuration * FMath::Clamp(AttackHitTimeRatio, 0.0f, 1.0f) : 0.0f;
+		if (HitDelay > 0.0f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(AttackHitTimer, this, &ASideScrollingCharacter::ApplyPendingAttackHit, HitDelay, false);
+		}
+		else
+		{
+			ApplyPendingAttackHit();
+		}
+	}
+}
+
+void ASideScrollingCharacter::ApplyPendingAttackHit()
+{
+	if (!bAttackHitPending)
+	{
+		return;
+	}
+
+	bAttackHitPending = false;
+	const float FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
+
+	bool bTraceAttempted = false;
+	if (bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(FacingSign, bTraceAttempted))
+	{
+		return;
+	}
+
+	if (!bTraceAttempted && ApplyFallbackBoxAttackHit(FacingSign))
+	{
+		return;
+	}
+
+	if (bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+	}
+}
+
+void ASideScrollingCharacter::BeginAttackHitWindow()
+{
+	if (!bAttackHitPending)
+	{
+		return;
+	}
+
+	bAttackHitWindowActive = true;
+	bHasPreviousWeaponTrace = false;
+	UpdateAttackHitWindow();
+}
+
+void ASideScrollingCharacter::EndAttackHitWindow()
+{
+	if (!bAttackHitWindowActive && !bAttackHitPending)
+	{
+		return;
+	}
+
+	bAttackHitWindowActive = false;
+	bHasPreviousWeaponTrace = false;
+
+	if (bAttackHitPending)
+	{
+		bAttackHitPending = false;
+		if (!bAttackRegisteredHit && bShowGameplayDebugMessages && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+		}
+	}
+}
+
+void ASideScrollingCharacter::UpdateAttackHitWindow()
+{
+	if (!bAttackHitPending || !bAttackHitWindowActive)
+	{
+		return;
+	}
+
+	bool bTraceAttempted = false;
+	const float FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
+	const bool bHit = bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(FacingSign, bTraceAttempted);
+	if (bHit)
+	{
+		bAttackRegisteredHit = true;
+	}
+
+	if (!bTraceAttempted)
+	{
+		bAttackHitWindowActive = false;
+		bHasPreviousWeaponTrace = false;
+		ApplyPendingAttackHit();
+	}
+}
+
+USceneComponent* ASideScrollingCharacter::FindSceneComponentByName(FName ComponentName) const
+{
+	if (ComponentName.IsNone())
+	{
+		return nullptr;
+	}
+
+	TArray<USceneComponent*> SceneComponents;
+	GetComponents<USceneComponent>(SceneComponents);
+	const FString TargetComponentName = ComponentName.ToString();
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (SceneComponent && (SceneComponent->GetFName() == ComponentName || SceneComponent->GetName().StartsWith(TargetComponentName)))
+		{
+			return SceneComponent;
+		}
+	}
+
+	return nullptr;
+}
+
+bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted)
+{
+	bOutTraceAttempted = false;
+
+	USceneComponent* TraceStartComponent = FindSceneComponentByName(WeaponTraceStartComponentName);
+	USceneComponent* TraceEndComponent = FindSceneComponentByName(WeaponTraceEndComponentName);
+	if (!TraceStartComponent || !TraceEndComponent)
+	{
+		if (bShowGameplayDebugMessages && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Orange, TEXT("Weapon trace points missing; using fallback attack box"));
+		}
+		return false;
+	}
+
+	bOutTraceAttempted = true;
+
+	const FVector TraceStart = TraceStartComponent->GetComponentLocation();
+	const FVector TraceEnd = TraceEndComponent->GetComponentLocation();
+
+	FCollisionShape TraceShape;
+	TraceShape.SetSphere(WeaponTraceRadius);
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	AModengEnemy* ClosestEnemy = nullptr;
+	float ClosestDistanceSq = TNumericLimits<float>::Max();
+	auto CollectClosestEnemy = [&](const TArray<FHitResult>& HitResults, const FVector& DistanceFrom)
+	{
+		for (const FHitResult& HitResult : HitResults)
+		{
+			AModengEnemy* Enemy = Cast<AModengEnemy>(HitResult.GetActor());
+			if (!Enemy || Enemy->IsDead() || HitEnemiesThisAttack.Contains(Enemy))
+			{
+				continue;
+			}
+
+			const float DistanceSq = FVector::DistSquared(DistanceFrom, Enemy->GetActorLocation());
+			if (DistanceSq < ClosestDistanceSq)
+			{
+				ClosestDistanceSq = DistanceSq;
+				ClosestEnemy = Enemy;
+			}
+		}
+	};
+
+	auto SweepWeaponSegment = [&](const FVector& Start, const FVector& End)
+	{
+		TArray<FHitResult> HitResults;
+		GetWorld()->SweepMultiByObjectType(HitResults, Start, End, FQuat::Identity, ObjectParams, TraceShape, QueryParams);
+		CollectClosestEnemy(HitResults, Start);
+	};
+
+	SweepWeaponSegment(TraceStart, TraceEnd);
+	if (bHasPreviousWeaponTrace)
+	{
+		SweepWeaponSegment(PreviousWeaponTraceStart, TraceStart);
+		SweepWeaponSegment(PreviousWeaponTraceEnd, TraceEnd);
+	}
+
+	PreviousWeaponTraceStart = TraceStart;
+	PreviousWeaponTraceEnd = TraceEnd;
+	bHasPreviousWeaponTrace = true;
+
+	if (!ClosestEnemy)
+	{
+		return false;
+	}
+
+	HitEnemiesThisAttack.Add(ClosestEnemy);
+	DamageEnemyFromAttack(ClosestEnemy, FacingSign);
+	return true;
+}
+
+bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(float FacingSign)
+{
 	const float CurrentRange = GetCurrentAttackRange();
 	const float CurrentRadius = GetCurrentAttackRadius();
 	const FVector AttackCenter = GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, 35.0f);
-
-	PlayAttackAnimation();
-	ShowAttackVisual(FacingSign);
 
 	FCollisionShape AttackBox;
 	AttackBox.SetBox(FVector3f(CurrentRange * 0.5f, CurrentRadius, CurrentRadius));
@@ -348,25 +572,31 @@ void ASideScrollingCharacter::DoAttack()
 		}
 	}
 
-	if (ClosestEnemy)
+	if (!ClosestEnemy)
 	{
-		ClosestEnemy->ApplyDamageToEnemy(GetCurrentAttackDamage(), this);
-		if (!ClosestEnemy->IsDead())
-		{
-			ClosestEnemy->AddActorWorldOffset(FVector(FacingSign * AttackKnockbackDistance, 0.0f, 0.0f), false);
-		}
+		return false;
+	}
 
-		if (bShowGameplayDebugMessages && GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Yellow, TEXT("Player hit enemy"));
-		}
+	DamageEnemyFromAttack(ClosestEnemy, FacingSign);
+	return true;
+}
 
+void ASideScrollingCharacter::DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign)
+{
+	if (!Enemy || Enemy->IsDead())
+	{
 		return;
+	}
+
+	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage(), this);
+	if (!Enemy->IsDead())
+	{
+		Enemy->AddActorWorldOffset(FVector(FacingSign * AttackKnockbackDistance, 0.0f, 0.0f), false);
 	}
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Yellow, TEXT("Player hit enemy"));
 	}
 }
 
@@ -398,33 +628,12 @@ void ASideScrollingCharacter::ConfigurePlayerVisuals()
 	}
 }
 
-void ASideScrollingCharacter::ConfigureAttackVisualMaterial()
-{
-	if (!AttackVisual || AttackVisual->GetNumMaterials() <= 0)
-	{
-		return;
-	}
-
-	UMaterialInterface* BaseMaterial = AttackVisual->GetMaterial(0);
-	if (!BaseMaterial)
-	{
-		return;
-	}
-
-	AttackVisualMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-	if (AttackVisualMaterial)
-	{
-		AttackVisualMaterial->SetVectorParameterValue(TEXT("Color"), AttackVisualColor);
-		AttackVisual->SetMaterial(0, AttackVisualMaterial);
-	}
-}
-
-void ASideScrollingCharacter::PlayAttackAnimation()
+float ASideScrollingCharacter::PlayAttackAnimation()
 {
 	USkeletalMeshComponent* CharacterMesh = GetMesh();
 	if (!bPlayAttackAnimation || !AttackAnimation || !CharacterMesh)
 	{
-		return;
+		return 0.0f;
 	}
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
@@ -438,8 +647,25 @@ void ASideScrollingCharacter::PlayAttackAnimation()
 	const float Duration = AttackAnimation->GetPlayLength() / SafePlayRate;
 	if (Duration > 0.0f)
 	{
-		GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::RestorePlayerAnimationBlueprint, Duration, false);
+		GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::FinishAttackAnimation, Duration, false);
 	}
+
+	return Duration;
+}
+
+void ASideScrollingCharacter::FinishAttackAnimation()
+{
+	if (bAttackHitWindowActive)
+	{
+		EndAttackHitWindow();
+	}
+	else if (bAttackHitPending)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+		ApplyPendingAttackHit();
+	}
+
+	RestorePlayerAnimationBlueprint();
 }
 
 void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
@@ -455,7 +681,9 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 	{
 		CharacterMesh->SetRelativeTransform(MeshTransformBeforeAttackAnimation);
 	}
+
 	bAttackAnimationInProgress = false;
+	bAttackHitPending = false;
 
 	if (PlayerAnimClass)
 	{
@@ -472,6 +700,13 @@ void ASideScrollingCharacter::InterruptAttackAnimation()
 	}
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
+	bAttackHitWindowActive = false;
+	bHasPreviousWeaponTrace = false;
+	HitEnemiesThisAttack.Empty();
+	bAttackHitPending = false;
 	RestorePlayerAnimationBlueprint();
 }
 
@@ -483,37 +718,6 @@ void ASideScrollingCharacter::UpdateFacingDirection(float FacingSign)
 	}
 
 	SetActorRotation(FRotator(0.0f, FacingSign >= 0.0f ? FacingYawRight : FacingYawLeft, 0.0f));
-}
-
-void ASideScrollingCharacter::ShowAttackVisual(float FacingSign)
-{
-	if (!AttackVisual)
-	{
-		return;
-	}
-
-	const float CurrentRange = GetCurrentAttackRange();
-	AttackVisual->SetWorldLocation(GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, AttackVisualZOffset));
-	AttackVisual->SetWorldRotation(FRotator(0.0f, 0.0f, 90.0f));
-	AttackVisual->SetWorldScale3D(FVector(CurrentRange / 100.0f, AttackVisualDepth / 100.0f, AttackVisualThickness / 100.0f));
-	if (AttackVisualMaterial)
-	{
-		AttackVisualMaterial->SetVectorParameterValue(TEXT("Color"), AttackVisualColor);
-	}
-	AttackVisual->SetHiddenInGame(false);
-	AttackVisual->SetVisibility(true);
-
-	GetWorld()->GetTimerManager().ClearTimer(AttackVisualTimer);
-	GetWorld()->GetTimerManager().SetTimer(AttackVisualTimer, this, &ASideScrollingCharacter::HideAttackVisual, AttackVisualDuration, false);
-}
-
-void ASideScrollingCharacter::HideAttackVisual()
-{
-	if (AttackVisual)
-	{
-		AttackVisual->SetHiddenInGame(true);
-		AttackVisual->SetVisibility(false);
-	}
 }
 
 void ASideScrollingCharacter::AddInk(int32 Amount)

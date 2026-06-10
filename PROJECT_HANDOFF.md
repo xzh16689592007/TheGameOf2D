@@ -159,12 +159,20 @@
     - Uses overlap query to find actors implementing `ISideScrollingInteractable`.
   - Attack:
     - `J` and left mouse button call `DoAttack()`.
-    - Uses a box overlap from the player forward, not a single sphere.
-    - Has a short cylinder-based slash/range visual instead of the old debug cube.
+    - Current primary hit detection uses the katana trace points on `BP_SideScrollingCharacter`:
+      - `KatanaTraceStart`
+      - `KatanaTraceEnd`
+    - During the attack hit window, C++ sweeps the blade segment every frame and also sweeps from the previous frame's trace points to the current frame's trace points, so fast sword motion is still detected.
+    - `AttackHitWindowStartRatio` and `AttackHitWindowEndRatio` tune the active damage window for the current attack animation.
+    - One enemy can only be damaged once per player attack through `HitEnemiesThisAttack`.
+    - If the trace point components are missing, C++ falls back to the old forward box overlap so attacks do not completely break while debugging Blueprint setup.
+    - The old yellow cylinder slash/range visual and weapon debug trace drawing have been removed.
     - Applies light knockback to enemies that survive the hit.
     - Supports a configurable `AttackAnimation` sequence, currently driven from C++ with `PlayAnimation()`.
+    - Repeated attack input is blocked while the current attack animation is in progress, so rapid clicking cannot repeatedly apply damage.
     - C++ records the mesh relative transform before the attack animation and restores it afterward via `bRestoreMeshTransformAfterAttackAnimation`, to reduce root/retarget offset issues.
     - Movement input can interrupt the current attack animation via `bMovementInterruptsAttackAnimation`, restoring the configured animation blueprint.
+    - Movement interruption also clears the pending attack hit window, so moving cancels damage for that attack.
     - If an attack animation visually lunges or snaps, prefer a retargeted `IP`/InPlace animation and disable root motion on the animation asset.
   - Visual setup:
     - C++ exposes `PlayerSkeletalMesh`, `PlayerAnimClass`, mesh relative transform, and attack animation fields for Blueprint tuning.
@@ -221,7 +229,11 @@
     - Use `Content/CombatMasterAnimBundle/Weapon/Katana/SM_Katana.uasset`.
     - Add/use a right-hand socket named `Socket_Katana_R` on `hand_r`.
     - Add a `Katana` static mesh component under `CharacterMesh0` in `BP_SideScrollingCharacter`, parented to `Socket_Katana_R`, with collision disabled.
-    - Damage still comes from the C++ attack overlap, not weapon collision.
+    - Add `KatanaTraceStart` and `KatanaTraceEnd` scene components as children of `Katana`.
+    - `KatanaTraceStart` should sit near the blade root/guard.
+    - `KatanaTraceEnd` should sit near the blade tip.
+    - Damage comes from C++ sweep traces between those two points during the attack hit window, not from the weapon mesh's own collision.
+    - User tested the final behavior: blade contact now applies damage, rapid clicking no longer causes repeated instant damage, and the temporary yellow slash/debug trace visuals were removed.
   - Recommended attack source to continue with: `DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A1_IP`, not root-motion variants.
 - Enemy health bar issue was fixed defensively in C++:
   - Added `AModengEnemy::EnsureHealthBarWidget()`.
@@ -280,6 +292,7 @@ Expected content:
 ## Recent Commits
 
 ```text
+a4d0a2a Update project handoff after Tomoe setup
 9fcc0c0 Add Tomoe player art and combat animation setup
 91a9714 Add project README
 86c0731 Update project handoff
@@ -300,7 +313,14 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone: commit `9fcc0c0` is pushed to `origin/main`. Tomoe player art, CombatMaster sword animation assets, the first Tomoe side-scroller AnimBP, retargeted attack assets, initial katana hookup work, player C++ visual/attack interruption/facing support, the later-wave enemy health-bar fix, and `DefaultEngine.ini` game map/game mode changes are all on GitHub.
+Latest synced milestone before the current pending commit: commit `a4d0a2a` is pushed to `origin/main`. Tomoe player art, CombatMaster sword animation assets, the first Tomoe side-scroller AnimBP, retargeted attack assets, initial katana hookup work, player C++ visual/attack interruption/facing support, the later-wave enemy health-bar fix, and `DefaultEngine.ini` game map/game mode changes are all on GitHub.
+
+Current pending update in this handoff:
+
+- Player attack now uses katana trace points and an attack hit window instead of applying damage instantly on click.
+- Old yellow attack visual and temporary weapon trace debug drawing were removed.
+- `BP_SideScrollingCharacter` contains the saved `Katana`, `KatanaTraceStart`, and `KatanaTraceEnd` setup.
+- Full external build was blocked while UE Live Coding was active; UHT completed. Rebuild with `Ctrl + Alt + F11` inside UE or close UE and run the full build command.
 
 ## Git Setup And Notes
 
@@ -315,7 +335,7 @@ Latest synced milestone: commit `9fcc0c0` is pushed to `origin/main`. Tomoe play
 - The Fab asset import under `Content/ROG_Creatures` should be committed through Git LFS.
 - `Config/DefaultEditor.ini` may get noisy editor preview-profile changes from opening imported assets. Do not commit those preview-profile changes unless the team explicitly wants editor profile settings in source control.
 - Large Tomoe and CombatMaster imports were pushed through Git LFS in commit `9fcc0c0` (`878` LFS objects, about `1.1 GB` uploaded during push).
-- Current local working tree after `9fcc0c0` should only have `Config/DefaultEditor.ini` modified from editor preview-profile noise unless the user has made new UE edits. Do not commit that file unless intentional.
+- Current local working tree may still show `Config/DefaultEditor.ini` modified from editor preview-profile noise. Do not commit that file unless intentional.
 
 Team clone instructions:
 
@@ -337,8 +357,9 @@ git lfs pull
   - Root-motion or bad retarget choices can cause visual mesh lunges/snaps.
   - C++ mesh-transform restoration helps but is not a substitute for clean in-place animation assets.
   - Movement currently interrupts attack animation intentionally; later this should move to Montage/AnimBP-driven attack states for smoother combat.
+  - Attack damage timing is currently C++ timer/window driven, using `AttackHitWindowStartRatio` / `AttackHitWindowEndRatio`. Later this should move to Anim Notifies or Montages for cleaner combo timing.
   - Tomoe base locomotion currently only has idle/run. Jump/fall/land states still need to be added.
-- Initial visible katana setup has started, but socket/rotation may still need tuning in-game.
+- Visible katana setup works, but socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
 - Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
 - If all lanterns are on platforms or unreachable by X-only enemies, enemies may not behave as intended.
@@ -364,12 +385,15 @@ git lfs pull
 3. Tune the visible katana/weapon:
    - Verify `Socket_Katana_R` is on Tomoe's real `hand_r` bone, not `ik_hand_r`.
    - Verify the `Katana` component in `BP_SideScrollingCharacter` uses `SM_Katana`, parent socket `Socket_Katana_R`, and `NoCollision`.
+   - Verify `KatanaTraceStart` and `KatanaTraceEnd` remain children of `Katana`.
+   - If a new attack animation misses despite visible blade contact, tune `AttackHitWindowStartRatio`, `AttackHitWindowEndRatio`, and `WeaponTraceRadius` first.
    - Tune socket transform in `SKEL_Tomoe_Skeleton` until the grip sits naturally in the right hand.
-   - Keep C++ hit detection separate from weapon mesh for now.
+   - Keep C++ hit detection separate from weapon mesh collision for now.
 
 4. Later: move player attacks from direct `PlayAnimation()` to Montage or AnimBP attack states:
-   - This will make attack blending, interruption, combo timing, and future jump/attack interactions cleaner.
-   - Keep the existing C++ overlap damage for gameplay until animation timing is tuned.
+   - This will make attack blending, interruption, combo timing, Anim Notifies, and future jump/attack interactions cleaner.
+   - Keep the existing C++ katana trace damage for gameplay until the animation system is ready for notifies/montages.
+   - Combo attacks 2/3 should reuse the same trace-window idea, with per-attack hit windows and one-hit-per-enemy tracking.
 
 5. Later: give fast and exploder enemies distinct polished visuals:
    - Fast enemy can be smaller/lighter/faster-looking.

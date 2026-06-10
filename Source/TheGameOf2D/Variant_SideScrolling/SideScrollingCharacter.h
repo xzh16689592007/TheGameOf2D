@@ -10,10 +10,9 @@ class UCameraComponent;
 class UAnimInstance;
 class UAnimSequenceBase;
 class UInputAction;
-class UMaterialInstanceDynamic;
-class UMaterialInterface;
+class USceneComponent;
 class USkeletalMesh;
-class UStaticMeshComponent;
+class AModengEnemy;
 struct FInputActionValue;
 
 /**
@@ -27,12 +26,6 @@ class ASideScrollingCharacter : public ACharacter
 	/** Player camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Camera", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* Camera;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Combat", meta = (AllowPrivateAccess = "true"))
-	UStaticMeshComponent* AttackVisual;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> AttackVisualMaterial;
 
 protected:
 
@@ -105,6 +98,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	bool bMovementInterruptsAttackAnimation = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bBlockRepeatedAttacksUntilAnimationEnds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AttackHitTimeRatio = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AttackHitWindowStartRatio = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AttackHitWindowEndRatio = 0.85f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
 	bool bLockFacingToSideScrollingAxis = true;
 
@@ -114,23 +119,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
 	float FacingYawLeft = 180.0f;
 
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.01"))
-	float AttackVisualDuration = 0.12f;
-
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "1.0"))
-	float AttackVisualThickness = 18.0f;
-
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "1.0"))
-	float AttackVisualDepth = 12.0f;
-
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
-	float AttackVisualZOffset = 48.0f;
-
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
-	FLinearColor AttackVisualColor = FLinearColor(1.0f, 0.55f, 0.08f, 0.9f);
-
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
 	float AttackKnockbackDistance = 30.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	bool bUseWeaponTraceForAttack = true;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "1.0"))
+	float WeaponTraceRadius = 24.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	FName WeaponTraceStartComponentName = TEXT("KatanaTraceStart");
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	FName WeaponTraceEndComponentName = TEXT("KatanaTraceEnd");
 
 	/** Extra damage gained for each weapon level after level 1 */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
@@ -192,10 +194,20 @@ protected:
 	/** Wall jump lockout timer */
 	FTimerHandle WallJumpTimer;
 
-	FTimerHandle AttackVisualTimer;
 	FTimerHandle AttackAnimationTimer;
+	FTimerHandle AttackHitTimer;
+	FTimerHandle AttackHitWindowStartTimer;
+	FTimerHandle AttackHitWindowEndTimer;
 
 	FTransform MeshTransformBeforeAttackAnimation;
+	FVector PreviousWeaponTraceStart = FVector::ZeroVector;
+	FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
+	TSet<AModengEnemy*> HitEnemiesThisAttack;
+	float PendingAttackFacingSign = 1.0f;
+	bool bAttackHitPending = false;
+	bool bAttackHitWindowActive = false;
+	bool bHasPreviousWeaponTrace = false;
+	bool bAttackRegisteredHit = false;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -225,6 +237,9 @@ protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+
+	/** Frame update */
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Gameplay cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
@@ -309,13 +324,19 @@ protected:
 
 	void TryUpgradeWeapon();
 	void ConfigurePlayerVisuals();
-	void ConfigureAttackVisualMaterial();
-	void PlayAttackAnimation();
+	float PlayAttackAnimation();
+	void ApplyPendingAttackHit();
+	void BeginAttackHitWindow();
+	void EndAttackHitWindow();
+	void UpdateAttackHitWindow();
 	void RestorePlayerAnimationBlueprint();
+	void FinishAttackAnimation();
 	void InterruptAttackAnimation();
 	void UpdateFacingDirection(float FacingSign);
-	void ShowAttackVisual(float FacingSign);
-	void HideAttackVisual();
+	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
+	bool ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted);
+	bool ApplyFallbackBoxAttackHit(float FacingSign);
+	void DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign);
 
 public:
 
