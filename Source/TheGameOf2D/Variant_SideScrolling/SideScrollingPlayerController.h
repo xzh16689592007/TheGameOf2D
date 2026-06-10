@@ -46,6 +46,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<ASideScrollingCharacter> CharacterClass;
 
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Interaction", meta = (ClampMin = "0.0"))
+	float LanternRepairReach = 500.0f;
+
 protected:
 
 	/** Gameplay initialization */
@@ -60,6 +63,8 @@ protected:
 	/** Called if the possessed pawn is destroyed */
 	UFUNCTION()
 	void OnPawnDestroyed(AActor* DestroyedActor);
+
+	void TryRepairNearestLantern();
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;

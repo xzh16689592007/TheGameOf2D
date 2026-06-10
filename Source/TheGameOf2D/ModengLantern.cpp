@@ -47,11 +47,14 @@ AModengLantern::AModengLantern()
 	InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	InteractionSphere->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+	InteractionSphere->SetGenerateOverlapEvents(true);
 
 	LanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LanternLight"));
 	LanternLight->SetupAttachment(LanternMesh);
 	LanternLight->SetRelativeLocation(FVector::ZeroVector);
 	ConfigureLanternLight();
+	RuntimeMaxLightIntensity = MaxLightIntensity;
 }
 
 void AModengLantern::BeginPlay()
@@ -77,8 +80,19 @@ void AModengLantern::BeginPlay()
 		}
 	}
 
-	ConfigureLanternLight();
+	if (InteractionSphere)
+	{
+		InteractionSphere->SetSphereRadius(280.0f);
+		InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
+		InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+		InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		InteractionSphere->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+		InteractionSphere->SetGenerateOverlapEvents(true);
+	}
+
 	UpdateLanternLightLocation();
+	RuntimeMaxLightIntensity = LanternLight ? FMath::Max(LanternLight->Intensity, MaxLightIntensity) : MaxLightIntensity;
 	CurrentDurability = FMath::Clamp(CurrentDurability, 0.0f, MaxDurability);
 	UpdateLanternVisuals();
 }
@@ -125,6 +139,21 @@ bool AModengLantern::IsExtinguished() const
 	return CurrentDurability <= 0.0f;
 }
 
+bool AModengLantern::CanRepairFromLocation(const FVector& WorldLocation, float AdditionalReach) const
+{
+	if (GetDurabilityPercent() >= 0.999f)
+	{
+		return false;
+	}
+
+	const float InteractionReach = InteractionSphere
+		? InteractionSphere->GetScaledSphereRadius()
+		: 280.0f;
+
+	const float AllowedDistanceSq = FMath::Square(InteractionReach + FMath::Max(0.0f, AdditionalReach));
+	return FVector::DistSquared(WorldLocation, GetActorLocation()) <= AllowedDistanceSq;
+}
+
 void AModengLantern::ConfigureLanternLight()
 {
 	if (!LanternLight)
@@ -138,7 +167,7 @@ void AModengLantern::ConfigureLanternLight()
 	LanternLight->SetSourceRadius(LightSourceRadius);
 	LanternLight->SetSoftSourceRadius(LightSoftSourceRadius);
 	LanternLight->SetVolumetricScatteringIntensity(LightVolumetricScatteringIntensity);
-	LanternLight->SetUseInverseSquaredFalloff(false);
+	LanternLight->SetUseInverseSquaredFalloff(true);
 	LanternLight->SetLightFalloffExponent(LightFalloffExponent);
 	LanternLight->SetCastShadows(false);
 	LanternLight->SetVisibility(true);
@@ -170,7 +199,7 @@ void AModengLantern::UpdateLanternVisuals()
 	{
 		const bool bLanternLit = !IsExtinguished();
 		LanternLight->SetVisibility(bLanternLit);
-		LanternLight->SetIntensity(bLanternLit ? MaxLightIntensity * DurabilityPercent : 0.0f);
+		LanternLight->SetIntensity(bLanternLit ? RuntimeMaxLightIntensity * DurabilityPercent : 0.0f);
 		LanternLight->SetLightColor(CurrentColor);
 	}
 }

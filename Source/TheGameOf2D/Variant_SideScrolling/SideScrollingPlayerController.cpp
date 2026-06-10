@@ -7,8 +7,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
 #include "SideScrollingCharacter.h"
+#include "ModengLantern.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"
 #include "TheGameOf2D.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -41,6 +43,9 @@ void ASideScrollingPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
+	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ASideScrollingPlayerController::TryRepairNearestLantern);
+	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ASideScrollingPlayerController::TryRepairNearestLantern);
+
 	// only add IMCs for local player controllers
 	if (IsLocalPlayerController())
 	{
@@ -61,6 +66,40 @@ void ASideScrollingPlayerController::SetupInputComponent()
 				}
 			}
 		}
+	}
+}
+
+void ASideScrollingPlayerController::TryRepairNearestLantern()
+{
+	APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn || !GetWorld())
+	{
+		return;
+	}
+
+	const FVector PawnLocation = ControlledPawn->GetActorLocation();
+	AModengLantern* ClosestRepairableLantern = nullptr;
+	float ClosestDistanceSq = TNumericLimits<float>::Max();
+
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		AModengLantern* Lantern = *It;
+		if (!Lantern || !Lantern->CanRepairFromLocation(PawnLocation, LanternRepairReach))
+		{
+			continue;
+		}
+
+		const float DistanceSq = FVector::DistSquared(PawnLocation, Lantern->GetActorLocation());
+		if (DistanceSq <= ClosestDistanceSq)
+		{
+			ClosestDistanceSq = DistanceSq;
+			ClosestRepairableLantern = Lantern;
+		}
+	}
+
+	if (ClosestRepairableLantern)
+	{
+		ClosestRepairableLantern->RepairByDefaultAmount();
 	}
 }
 

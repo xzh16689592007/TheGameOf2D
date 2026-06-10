@@ -19,8 +19,10 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/HitResult.h"
 #include "Engine/SkeletalMesh.h"
+#include "EngineUtils.h"
 #include "Components/SceneComponent.h"
 #include "ModengEnemy.h"
+#include "ModengLantern.h"
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
@@ -291,6 +293,30 @@ void ASideScrollingCharacter::DoInteract()
 			Interactable->Interaction(this);
 			return;
 		}
+	}
+
+	AModengLantern* ClosestRepairableLantern = nullptr;
+	float ClosestLanternDistanceSq = TNumericLimits<float>::Max();
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		AModengLantern* Lantern = *It;
+		if (!Lantern || !Lantern->CanRepairFromLocation(Start, InteractionRadius))
+		{
+			continue;
+		}
+
+		const float DistanceSq = FVector::DistSquared(Start, Lantern->GetActorLocation());
+		if (DistanceSq <= ClosestLanternDistanceSq)
+		{
+			ClosestLanternDistanceSq = DistanceSq;
+			ClosestRepairableLantern = Lantern;
+		}
+	}
+
+	if (ClosestRepairableLantern)
+	{
+		ClosestRepairableLantern->RepairByDefaultAmount();
+		return;
 	}
 
 	if (bShowGameplayDebugMessages && GEngine)

@@ -46,25 +46,25 @@ protected:
 	float RepairAmountPerUse = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float MaxLightIntensity = 30000.0f;
+	float MaxLightIntensity = 3500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
 	FVector InnerLightOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float LightAttenuationRadius = 1200.0f;
+	float LightAttenuationRadius = 520.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float LightSourceRadius = 80.0f;
+	float LightSourceRadius = 20.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float LightSoftSourceRadius = 180.0f;
+	float LightSoftSourceRadius = 60.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float LightVolumetricScatteringIntensity = 2.0f;
+	float LightVolumetricScatteringIntensity = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
-	float LightFalloffExponent = 2.0f;
+	float LightFalloffExponent = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lantern|Visual")
 	FLinearColor LitColor = FLinearColor(1.0f, 0.55f, 0.16f);
@@ -91,10 +91,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Lantern")
 	bool IsExtinguished() const;
 
+	bool CanRepairFromLocation(const FVector& WorldLocation, float AdditionalReach = 0.0f) const;
+
 protected:
 	void ConfigureLanternLight();
 	void UpdateLanternLightLocation();
 	void UpdateLanternVisuals();
+
+	float RuntimeMaxLightIntensity = 0.0f;
 
 	virtual void Interaction(AActor* Interactor) override;
 
