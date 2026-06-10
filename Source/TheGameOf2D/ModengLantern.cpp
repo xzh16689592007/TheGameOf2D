@@ -49,11 +49,9 @@ AModengLantern::AModengLantern()
 	InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
 	LanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LanternLight"));
-	LanternLight->SetupAttachment(RootComponent);
-	LanternLight->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
-	LanternLight->SetLightColor(LitColor);
-	LanternLight->SetIntensity(MaxLightIntensity);
-	LanternLight->SetAttenuationRadius(620.0f);
+	LanternLight->SetupAttachment(LanternMesh);
+	LanternLight->SetRelativeLocation(FVector::ZeroVector);
+	ConfigureLanternLight();
 }
 
 void AModengLantern::BeginPlay()
@@ -79,6 +77,8 @@ void AModengLantern::BeginPlay()
 		}
 	}
 
+	ConfigureLanternLight();
+	UpdateLanternLightLocation();
 	CurrentDurability = FMath::Clamp(CurrentDurability, 0.0f, MaxDurability);
 	UpdateLanternVisuals();
 }
@@ -125,6 +125,40 @@ bool AModengLantern::IsExtinguished() const
 	return CurrentDurability <= 0.0f;
 }
 
+void AModengLantern::ConfigureLanternLight()
+{
+	if (!LanternLight)
+	{
+		return;
+	}
+
+	LanternLight->SetLightColor(LitColor);
+	LanternLight->SetIntensity(MaxLightIntensity);
+	LanternLight->SetAttenuationRadius(LightAttenuationRadius);
+	LanternLight->SetSourceRadius(LightSourceRadius);
+	LanternLight->SetSoftSourceRadius(LightSoftSourceRadius);
+	LanternLight->SetVolumetricScatteringIntensity(LightVolumetricScatteringIntensity);
+	LanternLight->SetUseInverseSquaredFalloff(false);
+	LanternLight->SetLightFalloffExponent(LightFalloffExponent);
+	LanternLight->SetCastShadows(false);
+	LanternLight->SetVisibility(true);
+}
+
+void AModengLantern::UpdateLanternLightLocation()
+{
+	if (!LanternMesh || !LanternLight)
+	{
+		return;
+	}
+
+	FVector LocalBoundsMin = FVector::ZeroVector;
+	FVector LocalBoundsMax = FVector::ZeroVector;
+	LanternMesh->GetLocalBounds(LocalBoundsMin, LocalBoundsMax);
+
+	const FVector LocalBoundsCenter = (LocalBoundsMin + LocalBoundsMax) * 0.5f;
+	LanternLight->SetRelativeLocation(LocalBoundsCenter + InnerLightOffset);
+}
+
 void AModengLantern::UpdateLanternVisuals()
 {
 	const float DurabilityPercent = GetDurabilityPercent();
@@ -132,8 +166,13 @@ void AModengLantern::UpdateLanternVisuals()
 		? ExtinguishedColor
 		: FLinearColor::LerpUsingHSV(ExtinguishedColor, LitColor, DurabilityPercent);
 
-	LanternLight->SetIntensity(MaxLightIntensity * DurabilityPercent);
-	LanternLight->SetLightColor(CurrentColor);
+	if (LanternLight)
+	{
+		const bool bLanternLit = !IsExtinguished();
+		LanternLight->SetVisibility(bLanternLit);
+		LanternLight->SetIntensity(bLanternLit ? MaxLightIntensity * DurabilityPercent : 0.0f);
+		LanternLight->SetLightColor(CurrentColor);
+	}
 }
 
 void AModengLantern::Interaction(AActor* Interactor)
