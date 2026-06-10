@@ -67,48 +67,72 @@ AModengEnemy::AModengEnemy()
 	GetMesh()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCastShadow(true);
 
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> StickmanMesh(TEXT("/Game/ROG_Creatures/Stickman/Meshes/SK_Stickman.SK_Stickman"));
-	if (StickmanMesh.Succeeded())
+	for (int32 PartIndex = 0; PartIndex < 10; ++PartIndex)
 	{
-		EnemySkeletalMesh = StickmanMesh.Object;
+		const FName PartName = *FString::Printf(TEXT("EnemyMeshPart_%02d"), PartIndex);
+		USkeletalMeshComponent* MeshPart = CreateDefaultSubobject<USkeletalMeshComponent>(PartName);
+		MeshPart->SetupAttachment(GetMesh());
+		MeshPart->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MeshPart->SetGenerateOverlapEvents(false);
+		MeshPart->SetCastShadow(true);
+		MeshPart->SetHiddenInGame(true);
+		MeshPart->SetVisibility(false);
+		EnemyMeshPartComponents.Add(MeshPart);
+	}
+
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SkeletonWarriorMesh(TEXT("/Game/ModularCharacterSkeleton/Meshes/SK_Skeleton.SK_Skeleton"));
+	if (SkeletonWarriorMesh.Succeeded())
+	{
+		EnemySkeletalMesh = SkeletonWarriorMesh.Object;
 		GetMesh()->SetSkeletalMesh(EnemySkeletalMesh);
 	}
 
-	static ConstructorHelpers::FClassFinder<UAnimInstance> StickmanAnimClass(TEXT("/Game/ROG_Creatures/Stickman/Animations/ABP_Stickman"));
-	if (StickmanAnimClass.Succeeded())
+	const TCHAR* DefaultWarriorParts[] = {
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Chestpiece.SK_Chestpiece"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Boots.SK_Boots"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Gloves.SK_Gloves"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helm.SK_Helm"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Shoulder.SK_Shoulder"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Skirt.SK_Skirt"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Tabard.SK_Tabard")
+	};
+	for (const TCHAR* PartPath : DefaultWarriorParts)
 	{
-		EnemyAnimClass = StickmanAnimClass.Class;
-		GetMesh()->SetAnimInstanceClass(EnemyAnimClass);
+		ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshPart(PartPath);
+		if (MeshPart.Succeeded())
+		{
+			EnemySkeletalMeshParts.Add(MeshPart.Object);
+		}
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanAttackAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Attack_01.A_Stickman_Attack_01"));
-	if (StickmanAttackAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkeletonWarriorAttackAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_attack.Skeleton_Anim_attack"));
+	if (SkeletonWarriorAttackAnimation.Succeeded())
 	{
-		AttackAnimation = StickmanAttackAnimation.Object;
+		AttackAnimation = SkeletonWarriorAttackAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanIdleAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Idle.A_Stickman_Idle"));
-	if (StickmanIdleAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkeletonWarriorIdleAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_idle.Skeleton_Anim_idle"));
+	if (SkeletonWarriorIdleAnimation.Succeeded())
 	{
-		IdleAnimation = StickmanIdleAnimation.Object;
+		IdleAnimation = SkeletonWarriorIdleAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanWalkAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Walk.A_Stickman_Walk"));
-	if (StickmanWalkAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkeletonWarriorWalkAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_walk.Skeleton_Anim_walk"));
+	if (SkeletonWarriorWalkAnimation.Succeeded())
 	{
-		WalkAnimation = StickmanWalkAnimation.Object;
+		WalkAnimation = SkeletonWarriorWalkAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanHitAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_hit_back.A_Stickman_hit_back"));
-	if (StickmanHitAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkeletonWarriorHitAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_hit.Skeleton_Anim_hit"));
+	if (SkeletonWarriorHitAnimation.Succeeded())
 	{
-		HitAnimation = StickmanHitAnimation.Object;
+		HitAnimation = SkeletonWarriorHitAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> StickmanDeathAnimation(TEXT("/Game/ROG_Creatures/Stickman/Animations/A_Stickman_Death.A_Stickman_Death"));
-	if (StickmanDeathAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkeletonWarriorDeathAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death.Skeleton_Anim_Death"));
+	if (SkeletonWarriorDeathAnimation.Succeeded())
 	{
-		DeathAnimation = StickmanDeathAnimation.Object;
+		DeathAnimation = SkeletonWarriorDeathAnimation.Object;
 	}
 
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
@@ -333,6 +357,8 @@ void AModengEnemy::ConfigureEnemyVisuals()
 		EnemyBody->SetVisibility(true);
 	}
 
+	ConfigureEnemyMeshParts(bHasSkeletalVisual);
+
 	UMeshComponent* VisualMesh = bHasSkeletalVisual ? Cast<UMeshComponent>(GetMesh()) : Cast<UMeshComponent>(EnemyBody);
 	if (!bOverrideBodyMaterialColor || !VisualMesh)
 	{
@@ -356,6 +382,36 @@ void AModengEnemy::ConfigureEnemyVisuals()
 		EnemyBodyMaterial = DynamicMaterial;
 	}
 	SetEnemyBodyColor(EnemyBodyColor);
+}
+
+void AModengEnemy::ConfigureEnemyMeshParts(bool bHasSkeletalVisual)
+{
+	for (int32 PartIndex = 0; PartIndex < EnemyMeshPartComponents.Num(); ++PartIndex)
+	{
+		USkeletalMeshComponent* MeshPart = EnemyMeshPartComponents[PartIndex];
+		if (!MeshPart)
+		{
+			continue;
+		}
+
+		const bool bUsePart = bHasSkeletalVisual && EnemySkeletalMeshParts.IsValidIndex(PartIndex) && EnemySkeletalMeshParts[PartIndex];
+		MeshPart->SetHiddenInGame(!bUsePart);
+		MeshPart->SetVisibility(bUsePart);
+		MeshPart->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+		if (!bUsePart)
+		{
+			MeshPart->SetSkeletalMesh(nullptr);
+			MeshPart->SetLeaderPoseComponent(nullptr);
+			continue;
+		}
+
+		MeshPart->SetSkeletalMesh(EnemySkeletalMeshParts[PartIndex]);
+		MeshPart->SetRelativeLocation(FVector::ZeroVector);
+		MeshPart->SetRelativeRotation(FRotator::ZeroRotator);
+		MeshPart->SetRelativeScale3D(FVector::OneVector);
+		MeshPart->SetLeaderPoseComponent(GetMesh());
+	}
 }
 
 void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)

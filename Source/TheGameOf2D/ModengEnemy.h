@@ -14,6 +14,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UModengEnemyHealthWidget;
 class USkeletalMesh;
+class USkeletalMeshComponent;
 class UStaticMeshComponent;
 class UWidgetComponent;
 
@@ -76,6 +77,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	TObjectPtr<USkeletalMesh> EnemySkeletalMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	TArray<TObjectPtr<USkeletalMesh>> EnemySkeletalMeshParts;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	TSubclassOf<UAnimInstance> EnemyAnimClass;
@@ -163,6 +167,8 @@ protected:
 	FTimerHandle DeathDestroyTimer;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequenceBase> CurrentLoopingAnimation = nullptr;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USkeletalMeshComponent>> EnemyMeshPartComponents;
 	bool bIsDead = false;
 	bool bOneShotAnimationActive = false;
 	bool bWantsWalkAnimation = false;
@@ -172,6 +178,7 @@ protected:
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
 	void ConfigureEnemyVisuals();
+	void ConfigureEnemyMeshParts(bool bHasSkeletalVisual);
 	void SetEnemyBodyColor(const FLinearColor& Color);
 	void FlashHit();
 	void RestoreBodyColor();

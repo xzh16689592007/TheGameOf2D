@@ -4,24 +4,45 @@
 #include "ModengLantern.h"
 
 #include "Components/PointLightComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 AModengLantern::AModengLantern()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	LanternMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LanternMesh"));
-	SetRootComponent(LanternMesh);
+	LanternMesh->SetupAttachment(RootComponent);
+	LanternMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -6.0f));
+	LanternMesh->SetRelativeScale3D(FVector(3.2f, 3.2f, 3.2f));
 	LanternMesh->SetCollisionObjectType(ECC_WorldDynamic);
-	LanternMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	LanternMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LanternMesh->SetGenerateOverlapEvents(false);
 	LanternMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-	LanternMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> ChinaLanternMesh(TEXT("/Game/Fab/China_lantern/ChinaLamp.ChinaLamp"));
+	if (ChinaLanternMesh.Succeeded())
+	{
+		LanternMesh->SetStaticMesh(ChinaLanternMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ChinaLanternMaterial(TEXT("/Game/Fab/China_lantern/M_ChinaLamp_Textured.M_ChinaLamp_Textured"));
+	if (ChinaLanternMaterial.Succeeded())
+	{
+		LanternMesh->SetMaterial(0, ChinaLanternMaterial.Object);
+	}
 
 	InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
 	InteractionSphere->SetupAttachment(RootComponent);
-	InteractionSphere->SetSphereRadius(180.0f);
+	InteractionSphere->SetSphereRadius(240.0f);
 	InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
 	InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -29,15 +50,34 @@ AModengLantern::AModengLantern()
 
 	LanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LanternLight"));
 	LanternLight->SetupAttachment(RootComponent);
-	LanternLight->SetRelativeLocation(FVector(0.0f, 0.0f, 80.0f));
+	LanternLight->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
 	LanternLight->SetLightColor(LitColor);
 	LanternLight->SetIntensity(MaxLightIntensity);
-	LanternLight->SetAttenuationRadius(450.0f);
+	LanternLight->SetAttenuationRadius(620.0f);
 }
 
 void AModengLantern::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (LanternMesh)
+	{
+		if (UStaticMesh* ChinaLanternMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Fab/China_lantern/ChinaLamp.ChinaLamp")))
+		{
+			LanternMesh->SetStaticMesh(ChinaLanternMesh);
+		}
+
+		LanternMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -6.0f));
+		LanternMesh->SetRelativeScale3D(FVector(3.2f, 3.2f, 3.2f));
+		LanternMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		LanternMesh->SetGenerateOverlapEvents(false);
+		LanternMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+
+		if (UMaterialInterface* ChinaLanternMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Fab/China_lantern/M_ChinaLamp_Textured.M_ChinaLamp_Textured")))
+		{
+			LanternMesh->SetMaterial(0, ChinaLanternMaterial);
+		}
+	}
 
 	CurrentDurability = FMath::Clamp(CurrentDurability, 0.0f, MaxDurability);
 	UpdateLanternVisuals();

@@ -11,7 +11,10 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "ModengEnemy.h"
+#include "ModengExploderEnemy.h"
+#include "ModengFastEnemy.h"
 #include "ModengLantern.h"
+#include "ModengRangedEnemy.h"
 #include "ModengResultWidget.h"
 #include "TimerManager.h"
 
@@ -19,11 +22,31 @@ AModengEnemySpawner::AModengEnemySpawner()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	ResultWidgetClass = UModengResultWidget::StaticClass();
+	EnemyTypes = {
+		AModengEnemy::StaticClass(),
+		AModengFastEnemy::StaticClass(),
+		AModengExploderEnemy::StaticClass(),
+		AModengRangedEnemy::StaticClass()
+	};
 }
 
 void AModengEnemySpawner::BeginPlay()
 {
 	Super::BeginPlay();
+
+	bool bHasRangedEnemy = false;
+	for (const TSubclassOf<AModengEnemy>& EnemyClass : EnemyTypes)
+	{
+		if (EnemyClass && EnemyClass->IsChildOf(AModengRangedEnemy::StaticClass()))
+		{
+			bHasRangedEnemy = true;
+			break;
+		}
+	}
+	if (!bHasRangedEnemy)
+	{
+		EnemyTypes.Add(AModengRangedEnemy::StaticClass());
+	}
 
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
 	{

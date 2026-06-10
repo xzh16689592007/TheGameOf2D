@@ -8,6 +8,7 @@
 #include "ModengLantern.generated.h"
 
 class UPointLightComponent;
+class USceneComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 
@@ -22,6 +23,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lantern")
+	USceneComponent* SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lantern")
 	UStaticMeshComponent* LanternMesh;
