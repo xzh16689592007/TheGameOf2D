@@ -65,6 +65,14 @@
     - `Content/ROG_Creatures/Stickman/Animations/ABP_Stickman.uasset`
     - `Content/ROG_Creatures/Stickman/Animations/A_Stickman_Idle.uasset`
     - `Content/ROG_Creatures/Stickman/Animations/A_Stickman_Walk.uasset`
+- Imported lantern art folder: `Content/Fab/China_lantern`
+  - C++ defaults now use `ChinaLamp.uasset` and `M_ChinaLamp_Textured.uasset` for `AModengLantern`.
+- Imported modular skeleton enemy folder: `Content/ModularCharacterSkeleton`
+  - Used by basic, fast, and exploder enemy C++ loadouts.
+  - Important resources include `Content/ModularCharacterSkeleton/Meshes/SK_Skeleton.uasset` and modular body part meshes.
+- Imported skeleton wizard enemy folder: `Content/StylizedSkeletonWizard`
+  - Used by the ranged enemy C++ loadout.
+  - Important resources include `Content/StylizedSkeletonWizard/Meshes/SK_Body.uasset`, wizard modular parts, staff meshes, and spell/idle/walk/death animations.
 - Important Blueprints:
   - `Content/MoDeng/Blueprints/BP_ModengLantern.uasset`
   - `Content/MoDeng/Blueprints/BP_ModengEnemy.uasset`
@@ -81,6 +89,8 @@
     - `Source/TheGameOf2D/ModengLantern.cpp`
   - Has durability, repair, damage, light intensity/color update.
   - Implements `ISideScrollingInteractable`.
+  - C++ defaults now load the China lantern mesh/material from `Content/Fab/China_lantern`.
+  - Recent teammate updates improved lantern light visibility and repair interaction behavior.
 
 - `AModengEnemy`
   - Files:
@@ -94,14 +104,15 @@
   - Enemy collision is query/overlap only, so enemies do not physically block player or each other.
   - Has `EnemyBody` as a `UStaticMeshComponent` for current visuals.
   - Uses inherited `ACharacter::Mesh` for animated skeletal visuals when available.
-  - C++ default skeletal visuals load `SK_Stickman` and `ABP_Stickman`.
-  - C++ default animation hooks load Stickman idle, walk, attack, hit, and death animation sequences.
+  - C++ default skeletal visuals now load `Content/ModularCharacterSkeleton/Meshes/SK_Skeleton.uasset`.
+  - C++ default modular loadout attaches skeleton armor/body-part meshes to `ACharacter::Mesh`.
+  - C++ default animation hooks load modular skeleton idle, walk, attack, hit, and death animation sequences.
   - C++ can directly drive idle/walk looping animations with `bUseDirectLocomotionAnimations`, which avoids relying on the animation blueprint receiving movement speed from manual `SetActorLocation` movement.
   - Attacking a lantern temporarily plays the attack animation sequence, then restores the animation blueprint.
   - Taking non-lethal damage plays a hit animation and still updates the health bar.
   - Dying plays the death animation sequence, disables collision immediately, then destroys after the animation/delay.
   - `EnemyBody` remains as a static mesh fallback and is hidden when skeletal visuals are enabled.
-  - `BP_ModengEnemy` previously used `SM_Stickman` on `EnemyBody`; C++ now prefers the skeletal Stickman setup at runtime.
+  - `BP_ModengEnemy` previously used `SM_Stickman` on `EnemyBody`; C++ now prefers the modular skeleton setup at runtime.
   - C++ supports optional material color override and hit flash for placeholder visuals. For imported art, keep `bOverrideBodyMaterialColor` false so the model keeps its own material.
 
 - `AModengFastEnemy`
@@ -110,7 +121,8 @@
     - `Source/TheGameOf2D/ModengFastEnemy.cpp`
   - Inherits `AModengEnemy`.
   - Faster, lower health, faster attack interval.
-  - Currently keeps placeholder/static visual defaults; `bUseSkeletalMeshVisuals` is disabled in C++ until it gets a distinct animated setup.
+  - Uses modular skeleton visuals through `ApplyEnemyLoadout()`.
+  - Current loadout uses lighter/unarmed body parts and unarmed idle/run/attack/hit/death animations.
 
 - `AModengExploderEnemy`
   - Files:
@@ -119,7 +131,23 @@
   - Inherits `AModengEnemy`.
   - Overrides attack behavior.
   - Bursts near lantern, deals larger damage, then dies.
-  - Currently keeps placeholder/static visual defaults; `bUseSkeletalMeshVisuals` is disabled in C++ until it gets a distinct animated setup.
+  - Uses modular skeleton visuals through `ApplyEnemyLoadout()`.
+  - Current loadout uses heavier/brute body parts and weapon-style attack/death animations.
+
+- `AModengRangedEnemy`
+  - Files:
+    - `Source/TheGameOf2D/ModengRangedEnemy.h`
+    - `Source/TheGameOf2D/ModengRangedEnemy.cpp`
+  - Inherits `AModengEnemy`.
+  - Uses the skeleton wizard mesh, wizard modular parts, staff, and spell-cast animation loadout.
+  - Attacks lanterns from range by spawning `AModengMagicProjectile`.
+
+- `AModengMagicProjectile`
+  - Files:
+    - `Source/TheGameOf2D/ModengMagicProjectile.h`
+    - `Source/TheGameOf2D/ModengMagicProjectile.cpp`
+  - Projectile actor used by `AModengRangedEnemy`.
+  - Travels toward the target lantern and applies impact damage/radius behavior on hit.
 
 - `AModengEnemySpawner`
   - Files:
@@ -127,6 +155,7 @@
     - `Source/TheGameOf2D/ModengEnemySpawner.cpp`
   - Wave-based spawner.
   - Exposes `EnemyTypes`, `TotalWaves`, `BaseEnemiesPerWave`, `ExtraEnemiesPerWave`, `SpawnInterval`, `MaxAliveEnemies`, `DelayBetweenWaves`.
+  - Recent teammate update adds `AModengRangedEnemy` to the default enemy type list if it is not already present.
   - Checks victory/defeat.
   - Shows C++ result UI on victory/defeat.
   - Exposes `OnGameEnded`, `OnVictory`, and `OnDefeat` delegates for Blueprint/UI/VFX hooks.
@@ -219,9 +248,17 @@
     - A Tomoe attack animation was retargeted/exported under `Content/MoDeng/Animations/Tomoe/Attack`.
   - `ABP_Tomoe_SideScroller` has been created as the first Tomoe locomotion animation blueprint.
     - Event Graph reads pawn velocity and writes a `Speed` float.
-    - `Locomotion` state machine currently has `Idle` and `Run` states.
+    - Event Graph now also reads character movement `IsFalling` into `IsInAir`.
+    - Event Graph now stores vertical velocity in `VelocityZ`.
+    - `Locomotion` state machine currently has `Idle`, `Run`, `JumpStart`, and `FallLoop` states.
     - Current idle/run assets are Tomoe demo animations, with `MF_Run_Fwd` used for run.
-    - Jump/fall states have not been added yet, so jumping can still show the run animation.
+    - Jump transitions:
+      - `Idle -> JumpStart` and `Run -> JumpStart` when `IsInAir` is true.
+      - `JumpStart -> FallLoop` when `VelocityZ <= 0`.
+      - `FallLoop -> Idle` when grounded and `Speed <= 5`.
+      - `FallLoop -> Run` when grounded and `Speed > 5`.
+    - Important animation note: Tomoe jump/fall states must use Tomoe-compatible animations. Do not use `Skeleton_Anim_Jump*` from `Content/ModularCharacterSkeleton` directly on Tomoe; it causes visible body deformation/squashing.
+    - User tested the corrected jump setup in UE after replacing the wrong jump animation, and the jump/fall state split works.
   - `BP_SideScrollingCharacter` has been updated to use Tomoe player visuals and Tomoe animation setup.
   - User tested and reported Tomoe is visible in game, idle/run works, and a retargeted attack can play.
   - C++ movement interruption and fixed side-scroller facing were added after the user noticed attack sliding and slow camera-facing rotation when tapping movement.
@@ -292,6 +329,11 @@ Expected content:
 ## Recent Commits
 
 ```text
+1af8cdd Fix melee enemy loadouts
+468472f Fix lantern repair interaction
+6dc11a5 Make lantern light more visible
+9568979 Add new enemy visuals and lantern assets
+3b809c7 Add katana trace attack window
 a4d0a2a Update project handoff after Tomoe setup
 9fcc0c0 Add Tomoe player art and combat animation setup
 91a9714 Add project README
@@ -313,14 +355,14 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone before the current pending commit: commit `a4d0a2a` is pushed to `origin/main`. Tomoe player art, CombatMaster sword animation assets, the first Tomoe side-scroller AnimBP, retargeted attack assets, initial katana hookup work, player C++ visual/attack interruption/facing support, the later-wave enemy health-bar fix, and `DefaultEngine.ini` game map/game mode changes are all on GitHub.
+Latest synced milestone before the current pending commit: commit `1af8cdd` is pulled from `origin/main`. Tomoe player art, CombatMaster sword animation assets, katana trace attack window, new lantern art, modular skeleton enemy visuals, skeleton wizard ranged enemy, lantern repair/light fixes, melee enemy loadout fixes, and `DefaultEngine.ini` game map/game mode changes are all on GitHub.
 
 Current pending update in this handoff:
 
-- Player attack now uses katana trace points and an attack hit window instead of applying damage instantly on click.
-- Old yellow attack visual and temporary weapon trace debug drawing were removed.
-- `BP_SideScrollingCharacter` contains the saved `Katana`, `KatanaTraceStart`, and `KatanaTraceEnd` setup.
-- Full external build was blocked while UE Live Coding was active; UHT completed. Rebuild with `Ctrl + Alt + F11` inside UE or close UE and run the full build command.
+- `ABP_Tomoe_SideScroller` now has `IsInAir` and `VelocityZ`.
+- Tomoe locomotion now separates `JumpStart` and `FallLoop`.
+- Jump/fall transitions were tested in UE after replacing an incorrect non-Tomoe jump animation.
+- `Config/DefaultEditor.ini` may still be locally modified from editor preview/profile noise and should not be committed unless intentional.
 
 ## Git Setup And Notes
 
@@ -347,9 +389,10 @@ git lfs pull
 
 ## Known Issues / Rough Edges
 
-- Basic enemy now has C++ skeletal Stickman defaults and direct idle/walk/attack/hit/death animation sequence hooks. User tested it in UE and reported no issues.
+- Basic, fast, exploder, and ranged enemies now have C++ skeletal loadouts using the modular skeleton / skeleton wizard asset packs.
 - Later-wave enemy health bars previously disappeared. This was fixed by revalidating/initializing the native health widget before health-bar update/show. User reported it works.
-- Fast and exploder enemies still need their own distinct model/animation setup.
+- Fast and exploder enemies have distinct modular skeleton loadouts, but their exact scale/readability may still need gameplay tuning.
+- Ranged enemy exists and uses `AModengMagicProjectile`; tune projectile speed, impact radius, spawn offset, and wave pacing after playtesting.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Player is now visually migrated from default Manny/Quinn appearance to Samurai Girl Tomoe for the current prototype.
 - Player attack now supports a retargeted sword animation, but the animation/AnimBP setup is still early:
@@ -358,7 +401,8 @@ git lfs pull
   - C++ mesh-transform restoration helps but is not a substitute for clean in-place animation assets.
   - Movement currently interrupts attack animation intentionally; later this should move to Montage/AnimBP-driven attack states for smoother combat.
   - Attack damage timing is currently C++ timer/window driven, using `AttackHitWindowStartRatio` / `AttackHitWindowEndRatio`. Later this should move to Anim Notifies or Montages for cleaner combo timing.
-  - Tomoe base locomotion currently only has idle/run. Jump/fall/land states still need to be added.
+  - Tomoe base locomotion now has idle/run/jump-start/fall-loop. Landing polish is still not implemented as a dedicated state.
+  - Use only Tomoe-compatible or Tomoe-retargeted animation assets in `ABP_Tomoe_SideScroller`; using the modular skeleton enemy jump animations directly causes body deformation.
 - Visible katana setup works, but socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
 - Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
@@ -367,11 +411,11 @@ git lfs pull
 
 ## Suggested Next Steps
 
-1. Finish Tomoe jump/fall locomotion:
-   - Add an `IsInAir` boolean to `ABP_Tomoe_SideScroller`.
-   - Drive it from the player movement component `IsFalling`.
-   - Add an `Air` state using `MM_Fall_Loop` or another suitable Tomoe-compatible fall loop.
-   - Route `Idle/Run -> Air` when in air, and `Air -> Idle/Run` when grounded based on `Speed`.
+1. Polish Tomoe jump/fall locomotion:
+   - Current `JumpStart` / `FallLoop` split is working.
+   - Add a dedicated `Land` state only if it does not make movement feel sticky.
+   - Tune transition blend duration between `JumpStart` and `FallLoop` if the pose pops.
+   - Keep using Tomoe-compatible or Tomoe-retargeted jump/fall animations; do not use enemy skeleton animations directly.
 
 2. Continue polishing Tomoe player setup:
    - Open `BP_SideScrollingCharacter`.
