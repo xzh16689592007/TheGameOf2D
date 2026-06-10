@@ -103,3 +103,61 @@ void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 
 	Die();
 }
+
+void AModengExploderEnemy::ApplyEnemyLoadout()
+{
+	bUseSkeletalMeshVisuals = true;
+	bOverrideBodyMaterialColor = false;
+
+	if (USkeletalMesh* SkeletonBruteMesh = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Meshes/SK_Skeleton.SK_Skeleton")))
+	{
+		EnemySkeletalMesh = SkeletonBruteMesh;
+		if (GetMesh())
+		{
+			GetMesh()->SetSkeletalMesh(EnemySkeletalMesh);
+		}
+	}
+
+	EnemySkeletalMeshParts.Empty();
+	const TCHAR* BruteParts[] = {
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ChestBelt.SK_ChestBelt"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BootsFur.SK_BootsFur"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ArmBracersFur.SK_ArmBracersFur"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helmet.SK_Helmet"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_L_02.SK_ShoulderPad_L_02"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_R_02.SK_ShoulderPad_R_02"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Cape.SK_Cape")
+	};
+	for (const TCHAR* PartPath : BruteParts)
+	{
+		if (USkeletalMesh* MeshPart = LoadObject<USkeletalMesh>(nullptr, PartPath))
+		{
+			EnemySkeletalMeshParts.Add(MeshPart);
+		}
+	}
+
+	if (UAnimSequenceBase* BruteIdleAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_idle.Skeleton_Anim_idle")))
+	{
+		IdleAnimation = BruteIdleAnimation;
+	}
+
+	if (UAnimSequenceBase* BruteWalkAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_walk.Skeleton_Anim_walk")))
+	{
+		WalkAnimation = BruteWalkAnimation;
+	}
+
+	if (UAnimSequenceBase* BruteAttackAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_1H_Right_WeaponR.Skeleton_Anim_Attack_1H_Right_WeaponR")))
+	{
+		AttackAnimation = BruteAttackAnimation;
+	}
+
+	if (UAnimSequenceBase* BruteHitAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_hit.Skeleton_Anim_hit")))
+	{
+		HitAnimation = BruteHitAnimation;
+	}
+
+	if (UAnimSequenceBase* BruteDeathAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_WeaponR.Skeleton_Anim_Death_WeaponR")))
+	{
+		DeathAnimation = BruteDeathAnimation;
+	}
+}

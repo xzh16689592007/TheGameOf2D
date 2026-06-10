@@ -20,6 +20,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void AttackTarget(float DeltaSeconds) override;
 	virtual void Die() override;
+	virtual void ApplyEnemyLoadout() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Ranged")
 	TSubclassOf<AModengMagicProjectile> ProjectileClass;

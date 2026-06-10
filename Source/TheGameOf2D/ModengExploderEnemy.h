@@ -16,4 +16,5 @@ public:
 
 protected:
 	virtual void AttackTarget(float DeltaSeconds) override;
+	virtual void ApplyEnemyLoadout() override;
 };

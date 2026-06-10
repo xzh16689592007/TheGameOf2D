@@ -37,7 +37,6 @@ AModengRangedEnemy::AModengRangedEnemy()
 
 void AModengRangedEnemy::BeginPlay()
 {
-	ApplyWizardLoadout();
 	Super::BeginPlay();
 }
 
@@ -131,6 +130,11 @@ void AModengRangedEnemy::ApplyWizardLoadout()
 	{
 		DeathAnimation = WizardDeathAnimation;
 	}
+}
+
+void AModengRangedEnemy::ApplyEnemyLoadout()
+{
+	ApplyWizardLoadout();
 }
 
 void AModengRangedEnemy::FireProjectile()

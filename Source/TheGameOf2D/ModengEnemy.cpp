@@ -148,6 +148,7 @@ void AModengEnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	ApplyEnemyLoadout();
 	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
 	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 	ConfigureEnemyVisuals();
@@ -321,6 +322,65 @@ void AModengEnemy::Die()
 	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Enemy defeated"));
+	}
+}
+
+void AModengEnemy::ApplyEnemyLoadout()
+{
+	bUseSkeletalMeshVisuals = true;
+	bOverrideBodyMaterialColor = false;
+
+	if (USkeletalMesh* SkeletonWarriorMesh = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Meshes/SK_Skeleton.SK_Skeleton")))
+	{
+		EnemySkeletalMesh = SkeletonWarriorMesh;
+		if (GetMesh())
+		{
+			GetMesh()->SetSkeletalMesh(EnemySkeletalMesh);
+		}
+	}
+
+	EnemySkeletalMeshParts.Empty();
+	const TCHAR* WarriorParts[] = {
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Chestpiece.SK_Chestpiece"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Boots.SK_Boots"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Gloves.SK_Gloves"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helm.SK_Helm"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_L_01.SK_ShoulderPad_L_01"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_R_01.SK_ShoulderPad_R_01"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Belt.SK_Belt"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/Weapons/SK_Sword_1h.SK_Sword_1h")
+	};
+	for (const TCHAR* PartPath : WarriorParts)
+	{
+		if (USkeletalMesh* MeshPart = LoadObject<USkeletalMesh>(nullptr, PartPath))
+		{
+			EnemySkeletalMeshParts.Add(MeshPart);
+		}
+	}
+
+	if (UAnimSequenceBase* WarriorIdleAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Idle_WeaponR.Skeleton_Anim_Idle_WeaponR")))
+	{
+		IdleAnimation = WarriorIdleAnimation;
+	}
+
+	if (UAnimSequenceBase* WarriorWalkAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Walk_WeaponR.Skeleton_Anim_Walk_WeaponR")))
+	{
+		WalkAnimation = WarriorWalkAnimation;
+	}
+
+	if (UAnimSequenceBase* WarriorAttackAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_1H_Right_WeaponR.Skeleton_Anim_Attack_1H_Right_WeaponR")))
+	{
+		AttackAnimation = WarriorAttackAnimation;
+	}
+
+	if (UAnimSequenceBase* WarriorHitAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Hit_1H_WeaponR.Skeleton_Anim_Hit_1H_WeaponR")))
+	{
+		HitAnimation = WarriorHitAnimation;
+	}
+
+	if (UAnimSequenceBase* WarriorDeathAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_WeaponR.Skeleton_Anim_Death_WeaponR")))
+	{
+		DeathAnimation = WarriorDeathAnimation;
 	}
 }
 

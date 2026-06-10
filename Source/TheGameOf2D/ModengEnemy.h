@@ -177,6 +177,7 @@ protected:
 	virtual void MoveTowardTarget(float DeltaSeconds);
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
+	virtual void ApplyEnemyLoadout();
 	void ConfigureEnemyVisuals();
 	void ConfigureEnemyMeshParts(bool bHasSkeletalVisual);
 	void SetEnemyBodyColor(const FLinearColor& Color);

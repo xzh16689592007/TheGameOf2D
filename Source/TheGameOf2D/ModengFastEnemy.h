@@ -13,4 +13,7 @@ class THEGAMEOF2D_API AModengFastEnemy : public AModengEnemy
 
 public:
 	AModengFastEnemy();
+
+protected:
+	virtual void ApplyEnemyLoadout() override;
 };
