@@ -3,6 +3,7 @@
 
 #include "SideScrollingCharacter.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -20,6 +21,7 @@
 #include "Engine/HitResult.h"
 #include "Engine/SkeletalMesh.h"
 #include "EngineUtils.h"
+#include "DrawDebugHelpers.h"
 #include "Components/SceneComponent.h"
 #include "ModengEnemy.h"
 #include "ModengLantern.h"
@@ -56,10 +58,28 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 		GetMesh()->SetAnimInstanceClass(PlayerAnimClass);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> UnarmedAttackAnimation(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"));
-	if (UnarmedAttackAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> GroundAttack1Asset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.AM_Tomoe_GroundAttack_1"));
+	if (GroundAttack1Asset.Succeeded())
 	{
-		AttackAnimation = UnarmedAttackAnimation.Object;
+		GroundAttack1Montage = GroundAttack1Asset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> GroundAttack2Asset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_2.AM_Tomoe_GroundAttack_2"));
+	if (GroundAttack2Asset.Succeeded())
+	{
+		GroundAttack2Montage = GroundAttack2Asset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> GroundAttack3Asset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_3.AM_Tomoe_GroundAttack_3"));
+	if (GroundAttack3Asset.Succeeded())
+	{
+		GroundAttack3Montage = GroundAttack3Asset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> GroundAttack4Asset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_4.AM_Tomoe_GroundAttack_4"));
+	if (GroundAttack4Asset.Succeeded())
+	{
+		GroundAttack4Montage = GroundAttack4Asset.Object;
 	}
 
 	// configure the collision capsule
@@ -101,7 +121,27 @@ void ASideScrollingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bUseControllerRotationYaw = false;
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->bOrientRotationToMovement = false;
+		MovementComponent->bUseControllerDesiredRotation = false;
+	}
+
 	ConfigurePlayerVisuals();
+	UpdateFacingDirection(LastFacingX);
+
+	if (USceneComponent* HandSword = FindSceneComponentByName(TEXT("Sword_Hand")))
+	{
+		HandSword->SetVisibility(false, true);
+		HandSword->SetHiddenInGame(true, true);
+	}
+
+	if (USceneComponent* SheathedSword = FindSceneComponentByName(TEXT("Sword_Sheathed")))
+	{
+		SheathedSword->SetVisibility(true, true);
+		SheathedSword->SetHiddenInGame(false, true);
+	}
 }
 
 void ASideScrollingCharacter::Tick(float DeltaSeconds)
@@ -112,6 +152,7 @@ void ASideScrollingCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateAttackHitWindow();
 	}
+
 }
 
 void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -183,6 +224,11 @@ void ASideScrollingCharacter::Landed(const FHitResult& Hit)
 {
 	// reset the double jump
 	bHasDoubleJumped = false;
+
+	if (bAirToFloorAttackInProgress)
+	{
+		FinishAirToFloorImpact();
+	}
 }
 
 void ASideScrollingCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode /*= 0*/)
@@ -222,16 +268,25 @@ void ASideScrollingCharacter::DoMove(float Forward)
 	// is movement temporarily disabled after wall jumping?
 	if (!bHasWallJumped)
 	{
+		if (bAttackAnimationInProgress)
+		{
+			ActionValueY = 0.0f;
+			if (!bAirToFloorAttackInProgress)
+			{
+				if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+				{
+					MovementComponent->StopMovementImmediately();
+				}
+			}
+			return;
+		}
+
 		// save the movement values
 		ActionValueY = Forward;
 		if (!FMath::IsNearlyZero(Forward))
 		{
 			LastFacingX = Forward > 0.0f ? 1.0f : -1.0f;
 			UpdateFacingDirection(LastFacingX);
-			if (bMovementInterruptsAttackAnimation)
-			{
-				InterruptAttackAnimation();
-			}
 		}
 
 		// figure out the movement direction
@@ -250,6 +305,11 @@ void ASideScrollingCharacter::DoDrop(float Value)
 
 void ASideScrollingCharacter::DoJumpStart()
 {
+	if (bAttackAnimationInProgress && !bAirToFloorAttackInProgress)
+	{
+		return;
+	}
+
 	// handle advanced jump behaviors
 	MultiJump();
 }
@@ -327,56 +387,339 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoAttack()
 {
-	if (bBlockRepeatedAttacksUntilAnimationEnds && bAttackAnimationInProgress)
+	if (bAttackAnimationInProgress)
 	{
+		if (bAirToFloorAttackInProgress)
+		{
+			return;
+		}
+
+		if (bGroundAttackMontageInProgress && bGroundComboInputWindowOpen)
+		{
+			bComboInputQueued = true;
+		}
 		return;
 	}
 
-	const float FacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
-	PendingAttackFacingSign = FacingSign;
+	if (GetCharacterMovement() && GetCharacterMovement()->IsFalling())
+	{
+		StartAirToFloorAttack();
+		return;
+	}
+
+	StartGroundAttackMontage();
+}
+
+void ASideScrollingCharacter::StartAirToFloorAttack()
+{
+	UAnimSequenceBase* StartAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Start_01_Seq.Attack_Air_To_Floor_Start_01_Seq"));
+	UAnimSequenceBase* LoopAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.Attack_Air_To_Floor_Loop_01_Seq"));
+
+	bAirToFloorAttackInProgress = true;
+	SetCombatWeaponDrawn(true);
+
+	PendingAttackFacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
+	CurrentAttackDamageMultiplier = 1.35f;
+	CurrentAttackKnockbackDistance = 45.0f;
+	CurrentWeaponTraceRadius = FMath::Max(WeaponTraceRadius, 30.0f);
+	CurrentMinimumWeaponMotionSpeed = 80.0f;
+	bCurrentUseAutomaticWeaponMotionHitWindow = true;
 	bAttackHitPending = true;
 	bAttackHitWindowActive = false;
 	bHasPreviousWeaponTrace = false;
 	bAttackRegisteredHit = false;
+	bComboInputQueued = false;
 	HitEnemiesThisAttack.Empty();
 
-	const float AttackDuration = PlayAttackAnimation();
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
 
-	if (bUseWeaponTraceForAttack && AttackDuration > 0.0f)
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
-		const float WindowStartRatio = FMath::Clamp(AttackHitWindowStartRatio, 0.0f, 1.0f);
-		const float WindowEndRatio = FMath::Clamp(FMath::Max(AttackHitWindowEndRatio, WindowStartRatio), 0.0f, 1.0f);
-		const float WindowStartDelay = AttackDuration * WindowStartRatio;
-		float WindowEndDelay = AttackDuration * WindowEndRatio;
-		if (WindowEndDelay <= WindowStartDelay)
-		{
-			WindowEndDelay = FMath::Min(AttackDuration, WindowStartDelay + 0.05f);
-		}
-
-		if (WindowStartDelay > 0.0f)
-		{
-			GetWorld()->GetTimerManager().SetTimer(AttackHitWindowStartTimer, this, &ASideScrollingCharacter::BeginAttackHitWindow, WindowStartDelay, false);
-		}
-		else
-		{
-			BeginAttackHitWindow();
-		}
-
-		GetWorld()->GetTimerManager().SetTimer(AttackHitWindowEndTimer, this, &ASideScrollingCharacter::EndAttackHitWindow, WindowEndDelay, false);
+		MovementComponent->Velocity.X = 0.0f;
+		MovementComponent->Velocity.Y = 0.0f;
+		MovementComponent->Velocity.Z = FMath::Min(MovementComponent->Velocity.Z, -900.0f);
 	}
-	else
+
+	const float StartDuration = PlayAirToFloorAnimation(StartAnimation ? StartAnimation : LoopAnimation, false, ESideScrollingCombatAnimationPhase::AirToFloorStart);
+	BeginAttackHitWindow();
+
+	if (StartDuration <= 0.0f)
 	{
-		const float HitDelay = AttackDuration > 0.0f ? AttackDuration * FMath::Clamp(AttackHitTimeRatio, 0.0f, 1.0f) : 0.0f;
-		if (HitDelay > 0.0f)
+		BeginAirToFloorLoop();
+	}
+}
+
+void ASideScrollingCharacter::BeginAirToFloorLoop()
+{
+	if (!bAirToFloorAttackInProgress || !GetCharacterMovement() || !GetCharacterMovement()->IsFalling())
+	{
+		return;
+	}
+
+	UAnimSequenceBase* LoopAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.Attack_Air_To_Floor_Loop_01_Seq"));
+	PlayAirToFloorAnimation(LoopAnimation, true, ESideScrollingCombatAnimationPhase::AirToFloorLoop);
+}
+
+void ASideScrollingCharacter::FinishAirToFloorImpact()
+{
+	if (!bAirToFloorAttackInProgress)
+	{
+		return;
+	}
+
+	UAnimSequenceBase* EndAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_End_01_Seq.Attack_Air_To_Floor_End_01_Seq"));
+
+	if (bAttackHitWindowActive)
+	{
+		UpdateAttackHitWindow();
+		EndAttackHitWindow();
+	}
+
+	bAirToFloorAttackInProgress = false;
+	const float EndDuration = PlayAirToFloorAnimation(EndAnimation, false, ESideScrollingCombatAnimationPhase::AirToFloorEnd);
+	if (EndDuration <= 0.0f)
+	{
+		StartSheatheOrRestoreAnimation();
+	}
+}
+
+void ASideScrollingCharacter::StartGroundAttackMontage()
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
+	if (!bPlayAttackAnimation || !GetGroundAttackMontage(1) || !AnimInstance)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+	}
+
+	MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	bAttackAnimationInProgress = true;
+	bGroundAttackMontageInProgress = true;
+	bGroundComboInputWindowOpen = false;
+	bComboInputQueued = false;
+	bAirToFloorAttackInProgress = false;
+	CurrentGroundComboStep = 1;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::Attacking;
+	SetCombatWeaponDrawn(true);
+
+	if (!PlayGroundAttackMontageStep(1))
+	{
+		FinishGroundAttackMontageState(true);
+	}
+}
+
+bool ASideScrollingCharacter::PlayGroundAttackMontageStep(int32 ComboStepIndex)
+{
+	UAnimMontage* NextMontage = GetGroundAttackMontage(ComboStepIndex);
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
+	if (!bPlayAttackAnimation || !NextMontage || !AnimInstance)
+	{
+		return false;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+	}
+
+	CurrentGroundComboStep = FMath::Clamp(ComboStepIndex, 1, 4);
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::Attacking;
+	bAttackAnimationInProgress = true;
+	bGroundAttackMontageInProgress = true;
+	bGroundComboInputWindowOpen = false;
+	bComboInputQueued = false;
+	bAirToFloorAttackInProgress = false;
+	SetCombatWeaponDrawn(true);
+
+	ActiveGroundAttackMontage = NextMontage;
+
+	FOnMontageEnded EndDelegate;
+	EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnGroundAttackMontageEnded);
+	AnimInstance->Montage_SetEndDelegate(EndDelegate, NextMontage);
+
+	const float Duration = AnimInstance->Montage_Play(NextMontage, FMath::Max(GroundAttackMontagePlayRate, 0.1f));
+	if (Duration <= 0.0f)
+	{
+		ActiveGroundAttackMontage = nullptr;
+		return false;
+	}
+
+	return true;
+}
+
+UAnimMontage* ASideScrollingCharacter::GetGroundAttackMontage(int32 ComboStepIndex) const
+{
+	switch (ComboStepIndex)
+	{
+	case 1:
+		return GroundAttack1Montage.Get();
+	case 2:
+		return GroundAttack2Montage.Get();
+	case 3:
+		return GroundAttack3Montage.Get();
+	case 4:
+		return GroundAttack4Montage.Get();
+	default:
+		return nullptr;
+	}
+}
+
+void ASideScrollingCharacter::OpenGroundComboInputWindow()
+{
+	if (bGroundAttackMontageInProgress)
+	{
+		bGroundComboInputWindowOpen = true;
+	}
+}
+
+void ASideScrollingCharacter::CloseGroundComboInputWindow()
+{
+	bGroundComboInputWindowOpen = false;
+}
+
+void ASideScrollingCharacter::CommitGroundCombo()
+{
+	if (!bGroundAttackMontageInProgress)
+	{
+		return;
+	}
+
+	if (bComboInputQueued && CurrentGroundComboStep < 4)
+	{
+		const int32 NextComboStep = CurrentGroundComboStep + 1;
+		if (!PlayGroundAttackMontageStep(NextComboStep))
 		{
-			GetWorld()->GetTimerManager().SetTimer(AttackHitTimer, this, &ASideScrollingCharacter::ApplyPendingAttackHit, HitDelay, false);
+			FinishGroundAttackAndStartSheathe(true);
+			return;
 		}
-		else
+	}
+
+	bComboInputQueued = false;
+	bGroundComboInputWindowOpen = false;
+}
+
+void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
+{
+	CurrentGroundComboStep = FMath::Clamp(ComboStepIndex, 1, 4);
+	PendingAttackFacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
+	CurrentAttackDamageMultiplier = 0.75f + 0.15f * CurrentGroundComboStep;
+	if (CurrentGroundComboStep >= 4)
+	{
+		CurrentAttackDamageMultiplier = 1.4f;
+	}
+	CurrentAttackKnockbackDistance = CurrentGroundComboStep >= 4 ? 60.0f : 18.0f + 6.0f * CurrentGroundComboStep;
+	CurrentWeaponTraceRadius = CurrentGroundComboStep >= 4 ? 28.0f : 24.0f;
+	CurrentMinimumWeaponMotionSpeed = 120.0f;
+	bCurrentUseAutomaticWeaponMotionHitWindow = true;
+	bAttackHitPending = true;
+	bAttackRegisteredHit = false;
+	HitEnemiesThisAttack.Empty();
+	BeginAttackHitWindow();
+}
+
+void ASideScrollingCharacter::EndGroundAttackTrace()
+{
+	EndAttackHitWindow();
+}
+
+void ASideScrollingCharacter::FinishGroundAttackMontage()
+{
+	FinishGroundAttackAndStartSheathe(true);
+}
+
+void ASideScrollingCharacter::FinishGroundAttackMontageFromMontage(UAnimMontage* SourceMontage)
+{
+	if (SourceMontage && SourceMontage != ActiveGroundAttackMontage)
+	{
+		return;
+	}
+
+	FinishGroundAttackMontage();
+}
+
+void ASideScrollingCharacter::FinishGroundAttackAndStartSheathe(bool bStopActiveMontage)
+{
+	if (!bGroundAttackMontageInProgress)
+	{
+		return;
+	}
+
+	if (bAttackHitWindowActive)
+	{
+		EndAttackHitWindow();
+	}
+
+	UAnimMontage* MontageToStop = ActiveGroundAttackMontage;
+	ActiveGroundAttackMontage = nullptr;
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bComboInputQueued = false;
+	bAttackHitPending = false;
+	CurrentGroundComboStep = 0;
+
+	if (bStopActiveMontage)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
 		{
-			ApplyPendingAttackHit();
+			if (MontageToStop)
+			{
+				AnimInstance->Montage_Stop(0.08f, MontageToStop);
+			}
+		}
+	}
+
+	StartSheatheOrRestoreAnimation();
+}
+
+void ASideScrollingCharacter::OnGroundAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveGroundAttackMontage)
+	{
+		return;
+	}
+
+	ActiveGroundAttackMontage = nullptr;
+	if (bInterrupted)
+	{
+		FinishGroundAttackMontageState(bInterrupted);
+		return;
+	}
+
+	FinishGroundAttackAndStartSheathe(false);
+}
+
+void ASideScrollingCharacter::FinishGroundAttackMontageState(bool bInterrupted)
+{
+	if (bAttackHitWindowActive)
+	{
+		EndAttackHitWindow();
+	}
+
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bAttackAnimationInProgress = false;
+	bAttackHitPending = false;
+	bComboInputQueued = false;
+	CurrentGroundComboStep = 0;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+	ActiveGroundAttackMontage = nullptr;
+	SetCombatWeaponDrawn(false);
+
+	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
+	{
+		CharacterMesh->GlobalAnimRateScale = 1.0f;
+		if (bRestoreMeshTransformAfterAttackAnimation)
+		{
+			CharacterMesh->SetRelativeTransform(MeshTransformBeforeAttackAnimation);
 		}
 	}
 }
@@ -503,9 +846,14 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 
 	const FVector TraceStart = TraceStartComponent->GetComponentLocation();
 	const FVector TraceEnd = TraceEndComponent->GetComponentLocation();
+	const float DeltaSeconds = FMath::Max(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0f, KINDA_SMALL_NUMBER);
+	const float WeaponMotionSpeed = bHasPreviousWeaponTrace
+		? FMath::Max(FVector::Dist(PreviousWeaponTraceStart, TraceStart), FVector::Dist(PreviousWeaponTraceEnd, TraceEnd)) / DeltaSeconds
+		: 0.0f;
+	const bool bWeaponMovingFastEnough = !bCurrentUseAutomaticWeaponMotionHitWindow || (bHasPreviousWeaponTrace && WeaponMotionSpeed >= CurrentMinimumWeaponMotionSpeed);
 
 	FCollisionShape TraceShape;
-	TraceShape.SetSphere(WeaponTraceRadius);
+	TraceShape.SetSphere(CurrentWeaponTraceRadius);
 
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
@@ -531,18 +879,33 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 				ClosestDistanceSq = DistanceSq;
 				ClosestEnemy = Enemy;
 			}
+
+			if (bDrawWeaponTraceDebug)
+			{
+				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, CurrentWeaponTraceRadius * 0.6f, 12, WeaponTraceDebugHitColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+			}
 		}
 	};
 
 	auto SweepWeaponSegment = [&](const FVector& Start, const FVector& End)
 	{
 		TArray<FHitResult> HitResults;
-		GetWorld()->SweepMultiByObjectType(HitResults, Start, End, FQuat::Identity, ObjectParams, TraceShape, QueryParams);
+		if (bWeaponMovingFastEnough)
+		{
+			GetWorld()->SweepMultiByObjectType(HitResults, Start, End, FQuat::Identity, ObjectParams, TraceShape, QueryParams);
+		}
+		if (bDrawWeaponTraceDebug)
+		{
+			const FColor SegmentColor = !bWeaponMovingFastEnough ? FColor::Silver : (HitResults.Num() > 0 ? WeaponTraceDebugHitColor : WeaponTraceDebugColor);
+			DrawDebugLine(GetWorld(), Start, End, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+			DrawDebugSphere(GetWorld(), Start, CurrentWeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+			DrawDebugSphere(GetWorld(), End, CurrentWeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+		}
 		CollectClosestEnemy(HitResults, Start);
 	};
 
 	SweepWeaponSegment(TraceStart, TraceEnd);
-	if (bHasPreviousWeaponTrace)
+	if (bHasPreviousWeaponTrace && bWeaponMovingFastEnough)
 	{
 		SweepWeaponSegment(PreviousWeaponTraceStart, TraceStart);
 		SweepWeaponSegment(PreviousWeaponTraceEnd, TraceEnd);
@@ -579,6 +942,10 @@ bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(float FacingSign)
 
 	TArray<FOverlapResult> OverlapResults;
 	GetWorld()->OverlapMultiByObjectType(OverlapResults, AttackCenter, FQuat::Identity, ObjectParams, AttackBox, QueryParams);
+	if (bDrawWeaponTraceDebug)
+	{
+		DrawDebugBox(GetWorld(), AttackCenter, FVector(CurrentRange * 0.5f, CurrentRadius, CurrentRadius), OverlapResults.Num() > 0 ? WeaponTraceDebugHitColor : WeaponTraceDebugColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+	}
 
 	AModengEnemy* ClosestEnemy = nullptr;
 	float ClosestDistanceSq = TNumericLimits<float>::Max();
@@ -614,10 +981,10 @@ void ASideScrollingCharacter::DamageEnemyFromAttack(AModengEnemy* Enemy, float F
 		return;
 	}
 
-	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage(), this);
+	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage() * CurrentAttackDamageMultiplier, this);
 	if (!Enemy->IsDead())
 	{
-		Enemy->AddActorWorldOffset(FVector(FacingSign * AttackKnockbackDistance, 0.0f, 0.0f), false);
+		Enemy->AddActorWorldOffset(FVector(FacingSign * CurrentAttackKnockbackDistance, 0.0f, 0.0f), false);
 	}
 
 	if (bShowGameplayDebugMessages && GEngine)
@@ -654,24 +1021,28 @@ void ASideScrollingCharacter::ConfigurePlayerVisuals()
 	}
 }
 
-float ASideScrollingCharacter::PlayAttackAnimation()
+float ASideScrollingCharacter::PlayAirToFloorAnimation(UAnimSequenceBase* AnimationToPlay, bool bLooping, ESideScrollingCombatAnimationPhase NewAnimationPhase)
 {
 	USkeletalMeshComponent* CharacterMesh = GetMesh();
-	if (!bPlayAttackAnimation || !AttackAnimation || !CharacterMesh)
+	if (!bPlayAttackAnimation || !AnimationToPlay || !CharacterMesh)
 	{
 		return 0.0f;
 	}
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
 
-	const float SafePlayRate = FMath::Max(AttackAnimationPlayRate, 0.1f);
-	MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
-	bAttackAnimationInProgress = true;
-	CharacterMesh->PlayAnimation(AttackAnimation, false);
-	CharacterMesh->GlobalAnimRateScale = SafePlayRate;
+	if (!bAttackAnimationInProgress)
+	{
+		MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	}
 
-	const float Duration = AttackAnimation->GetPlayLength() / SafePlayRate;
-	if (Duration > 0.0f)
+	bAttackAnimationInProgress = true;
+	CurrentCombatAnimationPhase = NewAnimationPhase;
+	CharacterMesh->PlayAnimation(AnimationToPlay, bLooping);
+	CharacterMesh->GlobalAnimRateScale = FMath::Max(AttackAnimationPlayRate, 0.1f);
+
+	const float Duration = AnimationToPlay->GetPlayLength() / CharacterMesh->GlobalAnimRateScale;
+	if (!bLooping && Duration > 0.0f)
 	{
 		GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::FinishAttackAnimation, Duration, false);
 	}
@@ -679,8 +1050,89 @@ float ASideScrollingCharacter::PlayAttackAnimation()
 	return Duration;
 }
 
+bool ASideScrollingCharacter::PlayCombatTransitionAnimation(UAnimSequenceBase* AnimationToPlay, ESideScrollingCombatAnimationPhase NewAnimationPhase)
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	if (!bPlayAttackAnimation || !AnimationToPlay || !CharacterMesh)
+	{
+		return false;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+
+	const float SafePlayRate = FMath::Max(CombatTransitionAnimationPlayRate, 0.1f);
+	if (!bAttackAnimationInProgress)
+	{
+		MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	}
+
+	bAttackAnimationInProgress = true;
+	CurrentCombatAnimationPhase = NewAnimationPhase;
+	CharacterMesh->PlayAnimation(AnimationToPlay, false);
+	CharacterMesh->GlobalAnimRateScale = SafePlayRate;
+
+	const float Duration = AnimationToPlay->GetPlayLength() / SafePlayRate;
+	if (Duration <= 0.0f)
+	{
+		CharacterMesh->GlobalAnimRateScale = 1.0f;
+		bAttackAnimationInProgress = false;
+		CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+		return false;
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::FinishAttackAnimation, Duration, false);
+	return true;
+}
+
+void ASideScrollingCharacter::StartSheatheOrRestoreAnimation()
+{
+	if (bPlayCombatTransitionAnimations && PlayCombatTransitionAnimation(CombatToIdleAnimation.Get(), ESideScrollingCombatAnimationPhase::Sheathing))
+	{
+		return;
+	}
+
+	RestorePlayerAnimationBlueprint();
+	ResetAttackCombo();
+	SetCombatWeaponDrawn(false);
+}
+
+void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
+{
+	if (USceneComponent* HandSword = FindSceneComponentByName(TEXT("Sword_Hand")))
+	{
+		HandSword->SetVisibility(bDrawn, true);
+		HandSword->SetHiddenInGame(!bDrawn, true);
+	}
+
+	if (USceneComponent* SheathedSword = FindSceneComponentByName(TEXT("Sword_Sheathed")))
+	{
+		SheathedSword->SetVisibility(!bDrawn, true);
+		SheathedSword->SetHiddenInGame(bDrawn, true);
+	}
+}
+
 void ASideScrollingCharacter::FinishAttackAnimation()
 {
+	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing)
+	{
+		RestorePlayerAnimationBlueprint();
+		ResetAttackCombo();
+		SetCombatWeaponDrawn(false);
+		return;
+	}
+
+	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorStart)
+	{
+		BeginAirToFloorLoop();
+		return;
+	}
+
+	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorEnd)
+	{
+		StartSheatheOrRestoreAnimation();
+		return;
+	}
+
 	if (bAttackHitWindowActive)
 	{
 		EndAttackHitWindow();
@@ -691,7 +1143,7 @@ void ASideScrollingCharacter::FinishAttackAnimation()
 		ApplyPendingAttackHit();
 	}
 
-	RestorePlayerAnimationBlueprint();
+	StartSheatheOrRestoreAnimation();
 }
 
 void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
@@ -710,6 +1162,9 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 
 	bAttackAnimationInProgress = false;
 	bAttackHitPending = false;
+	bComboInputQueued = false;
+	bAirToFloorAttackInProgress = false;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 
 	if (PlayerAnimClass)
 	{
@@ -733,7 +1188,26 @@ void ASideScrollingCharacter::InterruptAttackAnimation()
 	bHasPreviousWeaponTrace = false;
 	HitEnemiesThisAttack.Empty();
 	bAttackHitPending = false;
+	bComboInputQueued = false;
+	bAirToFloorAttackInProgress = false;
 	RestorePlayerAnimationBlueprint();
+	ResetAttackCombo();
+}
+
+void ASideScrollingCharacter::ResetAttackCombo()
+{
+	CurrentAttackDamageMultiplier = 1.0f;
+	CurrentAttackKnockbackDistance = AttackKnockbackDistance;
+	CurrentWeaponTraceRadius = WeaponTraceRadius;
+	CurrentMinimumWeaponMotionSpeed = 180.0f;
+	CurrentGroundComboStep = 0;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+	bCurrentUseAutomaticWeaponMotionHitWindow = false;
+	bComboInputQueued = false;
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bAirToFloorAttackInProgress = false;
+	ActiveGroundAttackMontage = nullptr;
 }
 
 void ASideScrollingCharacter::UpdateFacingDirection(float FacingSign)
@@ -743,7 +1217,17 @@ void ASideScrollingCharacter::UpdateFacingDirection(float FacingSign)
 		return;
 	}
 
-	SetActorRotation(FRotator(0.0f, FacingSign >= 0.0f ? FacingYawRight : FacingYawLeft, 0.0f));
+	const float DesiredFacingYaw = FacingSign >= 0.0f ? FacingYawRight : FacingYawLeft;
+	const float MeshFacingOffsetYaw = DesiredFacingYaw - FacingYawRight;
+
+	SetActorRotation(FRotator(0.0f, FacingYawRight, 0.0f));
+
+	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
+	{
+		FRotator MeshFacingRotation = PlayerMeshRelativeRotation;
+		MeshFacingRotation.Yaw += MeshFacingOffsetYaw;
+		CharacterMesh->SetRelativeRotation(MeshFacingRotation);
+	}
 }
 
 void ASideScrollingCharacter::AddInk(int32 Amount)

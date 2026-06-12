@@ -35,6 +35,7 @@ public class TheGameOf2D : ModuleRules
 			"TheGameOf2D/Variant_Combat/Interfaces",
 			"TheGameOf2D/Variant_Combat/UI",
 			"TheGameOf2D/Variant_SideScrolling",
+			"TheGameOf2D/Variant_SideScrolling/Animation",
 			"TheGameOf2D/Variant_SideScrolling/AI",
 			"TheGameOf2D/Variant_SideScrolling/Gameplay",
 			"TheGameOf2D/Variant_SideScrolling/Interfaces",

@@ -8,12 +8,23 @@
 
 class UCameraComponent;
 class UAnimInstance;
+class UAnimMontage;
 class UAnimSequenceBase;
 class UInputAction;
 class USceneComponent;
 class USkeletalMesh;
 class AModengEnemy;
 struct FInputActionValue;
+
+enum class ESideScrollingCombatAnimationPhase : uint8
+{
+	None,
+	Attacking,
+	Sheathing,
+	AirToFloorStart,
+	AirToFloorLoop,
+	AirToFloorEnd
+};
 
 /**
  *  A player-controllable character side scrolling game
@@ -68,6 +79,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
 	bool bShowGameplayDebugMessages = false;
 
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
+	bool bDrawWeaponTraceDebug = false;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug", meta = (ClampMin = "0.0"))
+	float WeaponTraceDebugDuration = 0.15f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug", meta = (ClampMin = "0.0"))
+	float WeaponTraceDebugLineThickness = 2.0f;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
+	FColor WeaponTraceDebugColor = FColor::Cyan;
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Debug")
+	FColor WeaponTraceDebugHitColor = FColor::Red;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Visuals")
 	TObjectPtr<USkeletalMesh> PlayerSkeletalMesh = nullptr;
 
@@ -86,11 +112,32 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	bool bPlayAttackAnimation = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo")
+	TObjectPtr<UAnimMontage> GroundAttack1Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo")
+	TObjectPtr<UAnimMontage> GroundAttack2Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo")
+	TObjectPtr<UAnimMontage> GroundAttack3Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo")
+	TObjectPtr<UAnimMontage> GroundAttack4Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo", meta = (ClampMin = "0.1"))
+	float GroundAttackMontagePlayRate = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
-	TObjectPtr<UAnimSequenceBase> AttackAnimation = nullptr;
+	TObjectPtr<UAnimSequenceBase> CombatToIdleAnimation = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.1"))
 	float AttackAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.1"))
+	float CombatTransitionAnimationPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bPlayCombatTransitionAnimations = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	bool bRestoreMeshTransformAfterAttackAnimation = true;
@@ -204,10 +251,22 @@ protected:
 	FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
 	TSet<AModengEnemy*> HitEnemiesThisAttack;
 	float PendingAttackFacingSign = 1.0f;
+	float CurrentAttackDamageMultiplier = 1.0f;
+	float CurrentAttackKnockbackDistance = 30.0f;
+	float CurrentWeaponTraceRadius = 24.0f;
+	float CurrentMinimumWeaponMotionSpeed = 180.0f;
+	int32 CurrentGroundComboStep = 0;
+	ESideScrollingCombatAnimationPhase CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
 	bool bAttackHitWindowActive = false;
 	bool bHasPreviousWeaponTrace = false;
 	bool bAttackRegisteredHit = false;
+	bool bComboInputQueued = false;
+	bool bGroundAttackMontageInProgress = false;
+	bool bGroundComboInputWindowOpen = false;
+	bool bAirToFloorAttackInProgress = false;
+	UAnimMontage* ActiveGroundAttackMontage = nullptr;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -324,7 +383,19 @@ protected:
 
 	void TryUpgradeWeapon();
 	void ConfigurePlayerVisuals();
-	float PlayAttackAnimation();
+	void StartGroundAttackMontage();
+	bool PlayGroundAttackMontageStep(int32 ComboStepIndex);
+	UAnimMontage* GetGroundAttackMontage(int32 ComboStepIndex) const;
+	void FinishGroundAttackAndStartSheathe(bool bStopActiveMontage);
+	void FinishGroundAttackMontageState(bool bInterrupted);
+	void OnGroundAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void StartAirToFloorAttack();
+	void BeginAirToFloorLoop();
+	void FinishAirToFloorImpact();
+	float PlayAirToFloorAnimation(UAnimSequenceBase* AnimationToPlay, bool bLooping, ESideScrollingCombatAnimationPhase NewAnimationPhase);
+	bool PlayCombatTransitionAnimation(UAnimSequenceBase* AnimationToPlay, ESideScrollingCombatAnimationPhase NewAnimationPhase);
+	void StartSheatheOrRestoreAnimation();
+	void SetCombatWeaponDrawn(bool bDrawn);
 	void ApplyPendingAttackHit();
 	void BeginAttackHitWindow();
 	void EndAttackHitWindow();
@@ -332,6 +403,7 @@ protected:
 	void RestorePlayerAnimationBlueprint();
 	void FinishAttackAnimation();
 	void InterruptAttackAnimation();
+	void ResetAttackCombo();
 	void UpdateFacingDirection(float FacingSign);
 	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
 	bool ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted);
@@ -339,6 +411,26 @@ protected:
 	void DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign);
 
 public:
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void OpenGroundComboInputWindow();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void CloseGroundComboInputWindow();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void CommitGroundCombo();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void BeginGroundAttackTrace(int32 ComboStepIndex);
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void EndGroundAttackTrace();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void FinishGroundAttackMontage();
+
+	void FinishGroundAttackMontageFromMontage(UAnimMontage* SourceMontage);
 
 	/** Sets the soft collision response. True passes, False blocks */
 	void SetSoftCollision(bool bEnabled);
