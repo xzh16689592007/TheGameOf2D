@@ -277,6 +277,7 @@ protected:
 	bool bComboInputQueued = false;
 	bool bGroundAttackMontageInProgress = false;
 	bool bGroundComboInputWindowOpen = false;
+	bool bGroundMoveCancelWindowOpen = false;
 	bool bAirToFloorAttackInProgress = false;
 	UAnimMontage* ActiveGroundAttackMontage = nullptr;
 	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
@@ -435,6 +436,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
 	void CommitGroundCombo();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void OpenGroundMoveCancelWindow();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void LoopGroundCombo();
 
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
 	void BeginGroundAttackTrace(int32 ComboStepIndex);

@@ -242,9 +242,11 @@
       - `SideScrollingAnimNotify_CloseComboWindow` closes the buffer.
       - `SideScrollingAnimNotify_CommitCombo` plays the next ground attack montage if input was queued.
       - `SideScrollingAnimNotify_FinishGroundAttack` starts sheath/restore when no next montage was committed.
+      - `SideScrollingAnimNotify_OpenMoveCancelWindow` allows movement input to cancel the current ground attack into sheath/restore from the authored notify point.
+      - `SideScrollingAnimNotify_LoopGroundCombo` lets the fourth ground attack consume queued attack input and restart at combo step 1 for another four-hit loop.
     - `FinishGroundAttack` now passes the source montage to C++ so an old montage's finish notify cannot accidentally sheath during the next combo step.
     - `BeginGroundAttackTrace` and `EndGroundAttackTrace` notifies define the authored damage window for each ground hit. `ComboStepIndex` must be 1, 2, 3, or 4 on the begin notify.
-    - The fourth ground attack has no combo-open/commit requirement; it only needs damage-window notifies and `FinishGroundAttack` near the end.
+    - The fourth ground attack now supports looping back into step 1 when attack input is queued before `Loop Ground Combo`; otherwise it continues to `FinishGroundAttack` and sheathes.
     - Ground combo movement and jumping are blocked while the attack montage is in progress.
     - Air-to-floor attack remains direct sequence playback for now:
       - `Attack_Air_To_Floor_Start_01_Seq`
@@ -271,8 +273,8 @@
     - Applies light knockback to enemies that survive the hit.
     - Repeated attack input is blocked outside the active combo window, so rapid clicking cannot repeatedly apply damage or skip steps.
     - C++ records the mesh relative transform before the attack animation and restores it afterward via `bRestoreMeshTransformAfterAttackAnimation`, to reduce root/retarget offset issues.
-    - Movement input no longer interrupts ground attacks; it is ignored and character movement is stopped while ground attack is active.
-    - If the combo input window feels too strict, tune the `Open Ground Combo Window`, `Close Ground Combo Window`, and `Commit Ground Combo` notify positions in the relevant montage rather than changing C++ first.
+    - Movement input no longer interrupts ground attacks until `Open Move Cancel Window` has fired. After that notify, movement cancels the active attack into sheath/restore and the same move input continues into locomotion.
+    - If the combo input window feels too strict, tune the `Open Ground Combo Window`, `Close Ground Combo Window`, `Commit Ground Combo`, and `Loop Ground Combo` notify positions in the relevant montage rather than changing C++ first.
   - Visual setup:
     - C++ exposes `PlayerSkeletalMesh`, `PlayerAnimClass`, mesh relative transform, and attack animation fields for Blueprint tuning.
     - C++ exposes `bLockFacingToSideScrollingAxis`, `FacingYawRight`, and `FacingYawLeft` so the side-scroller character does not slowly rotate toward the camera while tapping movement.
@@ -494,6 +496,10 @@ Current pending update in this handoff:
 - C++ allows movement during sheathing when `bAllowMovementDuringSheathing` is enabled or when the transition slot is `UpperBodyCombatSlot`.
 - Pressing attack during sheathing now interrupts the sheath montage and immediately starts a new ground attack, or air-to-floor attack if the character is falling.
 - Air-to-floor end now safely restores `PlayerAnimClass` before sheath/restore slot playback if the mesh was still in single-node animation mode, preventing the landing attack end animation from replaying instead of sheathing.
+- Added two native montage notifies:
+  - `Open Move Cancel Window`: movement input after this point cancels the active ground attack into sheath/restore and then continues into locomotion.
+  - `Loop Ground Combo`: usually placed on `AM_Tomoe_GroundAttack_4`; if attack input is queued, it restarts the combo at step 1 for another four-hit sequence.
+- The four ground attack montages were updated in UE with the new cancel/loop tuning points.
 - A full build after these C++ changes succeeded on 2026-06-17 with:
   - `Result: Succeeded`
 - Turn animation support was considered and then abandoned for now; do not treat the uncommitted `Content/MoDeng/Animations/Tomoe/Turn` folder as part of the active setup unless the team intentionally revisits turn-in-place.
@@ -535,7 +541,7 @@ git lfs pull
   - Current ground attacks are four independent `AM_Tomoe_GroundAttack_*` montages on `DefaultGroup.GroundAttackSlot`.
   - The four `Combo_Attack_02_0*_Seq` assets have root motion enabled, and `ABP_Tomoe_SideScroller` should stay on `Root Motion from Montages Only`.
   - Combo chaining is driven by native montage notifies, not by old `AttackComboSteps` or direct `PlayAnimation()` ground combo code.
-  - Current priority: validate the upper-body sheath flow in PIE: sheathing should allow movement when using `UpperBodyCombatSlot`, and pressing attack during sheathing should immediately start a new attack.
+  - Current priority: validate the new cancel/loop notify timing in PIE: movement should only cancel after `Open Move Cancel Window`, and attack queued before `Loop Ground Combo` on step 4 should restart at step 1.
   - Keep `Combo_Attack_02_All_Seq` only as a visual timing/pose reference for natural section-to-section connection.
   - Attack damage timing for ground combo is now authored by `BeginGroundAttackTrace` / `EndGroundAttackTrace` notifies. Air-to-floor attack still uses direct sequence playback and C++ trace logic.
   - Air-to-floor landing should transition into sheath/restore, not replay the landing attack end animation. If this regresses, inspect the single-node animation to AnimBP transition before changing animation assets.
@@ -560,12 +566,14 @@ git lfs pull
    - Disable `bDrawWeaponTraceDebug` unless actively debugging blade contact.
    - Cyan/red/silver weapon traces are useful for tuning, but they dominate gameplay footage.
 
-3. Tune the four-montage ground combo:
+3. Tune the four-montage ground combo cancel and loop windows:
    - Open `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.uasset` through `AM_Tomoe_GroundAttack_4.uasset`.
    - Confirm all four use `DefaultGroup.GroundAttackSlot`.
    - Confirm `ABP_Tomoe_SideScroller` root motion mode is `Root Motion from Montages Only`.
    - Press attack once: step 1 should play and then sheath.
    - Press attack during the notify window: step 1 should commit into step 2, then 3, then 4.
+   - Move after `Open Move Cancel Window`: the active attack should cancel into sheath/restore and locomotion should continue.
+   - On step 4, press attack before `Loop Ground Combo`: the combo should restart at step 1. If no input is queued, step 4 should still reach `Finish Ground Attack` and sheath.
    - If input feels too strict, tune notify positions first, not C++.
    - Use `Combo_Attack_02_All_Seq` as the reference for natural body-pose connection points.
 

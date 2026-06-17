@@ -270,19 +270,26 @@ void ASideScrollingCharacter::DoMove(float Forward)
 	{
 		if (bAttackAnimationInProgress)
 		{
-			const bool bUsesUpperBodySheatheSlot = CombatTransitionSlotName == FName(TEXT("UpperBodyCombatSlot"));
-			const bool bCanMoveDuringCurrentAttack = CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing && (bAllowMovementDuringSheathing || bUsesUpperBodySheatheSlot);
-			if (!bCanMoveDuringCurrentAttack)
+			if (bGroundAttackMontageInProgress && bGroundMoveCancelWindowOpen && !FMath::IsNearlyZero(Forward))
 			{
-				ActionValueY = 0.0f;
-				if (!bAirToFloorAttackInProgress)
+				FinishGroundAttackAndStartSheathe(true);
+			}
+			else
+			{
+				const bool bUsesUpperBodySheatheSlot = CombatTransitionSlotName == FName(TEXT("UpperBodyCombatSlot"));
+				const bool bCanMoveDuringCurrentAttack = CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing && (bAllowMovementDuringSheathing || bUsesUpperBodySheatheSlot);
+				if (!bCanMoveDuringCurrentAttack)
 				{
-					if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+					ActionValueY = 0.0f;
+					if (!bAirToFloorAttackInProgress)
 					{
-						MovementComponent->StopMovementImmediately();
+						if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+						{
+							MovementComponent->StopMovementImmediately();
+						}
 					}
+					return;
 				}
-				return;
 			}
 		}
 
@@ -542,6 +549,7 @@ void ASideScrollingCharacter::StartGroundAttackMontage()
 	bAttackAnimationInProgress = true;
 	bGroundAttackMontageInProgress = true;
 	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
 	CurrentGroundComboStep = 1;
@@ -574,6 +582,7 @@ bool ASideScrollingCharacter::PlayGroundAttackMontageStep(int32 ComboStepIndex)
 	bAttackAnimationInProgress = true;
 	bGroundAttackMontageInProgress = true;
 	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
 	SetCombatWeaponDrawn(true);
@@ -645,6 +654,33 @@ void ASideScrollingCharacter::CommitGroundCombo()
 	bGroundComboInputWindowOpen = false;
 }
 
+void ASideScrollingCharacter::OpenGroundMoveCancelWindow()
+{
+	if (bGroundAttackMontageInProgress)
+	{
+		bGroundMoveCancelWindowOpen = true;
+	}
+}
+
+void ASideScrollingCharacter::LoopGroundCombo()
+{
+	if (!bGroundAttackMontageInProgress || CurrentGroundComboStep < 4)
+	{
+		return;
+	}
+
+	if (bComboInputQueued)
+	{
+		if (!PlayGroundAttackMontageStep(1))
+		{
+			FinishGroundAttackAndStartSheathe(true);
+		}
+		return;
+	}
+
+	bGroundComboInputWindowOpen = false;
+}
+
 void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
 {
 	CurrentGroundComboStep = FMath::Clamp(ComboStepIndex, 1, 4);
@@ -700,6 +736,7 @@ void ASideScrollingCharacter::FinishGroundAttackAndStartSheathe(bool bStopActive
 	ActiveGroundAttackMontage = nullptr;
 	bGroundAttackMontageInProgress = false;
 	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
 	bComboInputQueued = false;
 	bAttackHitPending = false;
 	CurrentGroundComboStep = 0;
@@ -744,6 +781,7 @@ void ASideScrollingCharacter::FinishGroundAttackMontageState(bool bInterrupted)
 
 	bGroundAttackMontageInProgress = false;
 	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
 	bAttackAnimationInProgress = false;
 	bAttackHitPending = false;
 	bComboInputQueued = false;
@@ -1287,6 +1325,7 @@ void ASideScrollingCharacter::ResetAttackCombo()
 	bComboInputQueued = false;
 	bGroundAttackMontageInProgress = false;
 	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
 	bAirToFloorAttackInProgress = false;
 	ActiveGroundAttackMontage = nullptr;
 }
