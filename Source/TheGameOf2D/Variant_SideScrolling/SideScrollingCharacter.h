@@ -60,6 +60,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
 
+	/** Multiplies JumpZVelocity for the second jump. */
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump", meta = (ClampMin = "0.0"))
+	float DoubleJumpVerticalMultiplier = 1.0f;
+
 	/** Max distance that interactive objects can be triggered */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Interaction")
 	float InteractionRadius = 200.0f;
@@ -126,6 +130,27 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Ground Combo", meta = (ClampMin = "0.1"))
 	float GroundAttackMontagePlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Air To Floor")
+	TObjectPtr<UAnimMontage> AirToFloorAttackMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll")
+	TObjectPtr<UAnimSequenceBase> RollAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll")
+	TObjectPtr<UAnimMontage> RollMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll")
+	FName RollSlotName = TEXT("GroundAttackSlot");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll", meta = (ClampMin = "0.1"))
+	float RollPlayRate = 1.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll", meta = (ClampMin = "0.0"))
+	float RollBlendInTime = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll", meta = (ClampMin = "0.0"))
+	float RollBlendOutTime = 0.12f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	TObjectPtr<UAnimSequenceBase> CombatToIdleAnimation = nullptr;
@@ -279,8 +304,18 @@ protected:
 	bool bGroundComboInputWindowOpen = false;
 	bool bGroundMoveCancelWindowOpen = false;
 	bool bAirToFloorAttackInProgress = false;
+	bool bRollInProgress = false;
+	bool bRollCancelWindowOpen = false;
+	bool bRollInvincible = false;
+	bool bRollAttackQueued = false;
+	bool bRollJumpQueued = false;
+	bool bRollPausedFalling = false;
+	float RollMoveQueuedValue = 0.0f;
+	float SavedRollGravityScale = 1.75f;
 	UAnimMontage* ActiveGroundAttackMontage = nullptr;
+	UAnimMontage* ActiveAirToFloorAttackMontage = nullptr;
 	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
+	UAnimMontage* ActiveRollMontage = nullptr;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -366,6 +401,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoAttack();
 
+	/** Handles roll inputs from either controls or UI interfaces */
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoRoll();
+
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Progression")
 	void AddInk(int32 Amount);
 
@@ -407,11 +446,18 @@ protected:
 	void BeginAirToFloorLoop();
 	void FinishAirToFloorImpact();
 	float PlayAirToFloorAnimation(UAnimSequenceBase* AnimationToPlay, bool bLooping, ESideScrollingCombatAnimationPhase NewAnimationPhase);
+	void OnAirToFloorAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void StopActiveAirToFloorAttackMontage(float BlendOutTime);
 	bool PlayCombatTransitionAnimation(UAnimSequenceBase* AnimationToPlay, ESideScrollingCombatAnimationPhase NewAnimationPhase);
 	void StartSheatheOrRestoreAnimation();
 	void FinishCombatTransitionState();
 	void OnCombatTransitionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void SetCombatWeaponDrawn(bool bDrawn);
+	void OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void StopActiveRollMontage(float BlendOutTime);
+	void TryConsumeRollQueuedInput();
+	void PauseFallingForAirRoll();
+	void RestoreRollFallingMovement();
 	void ApplyPendingAttackHit();
 	void BeginAttackHitWindow();
 	void EndAttackHitWindow();
@@ -453,6 +499,18 @@ public:
 	void FinishGroundAttackMontage();
 
 	void FinishGroundAttackMontageFromMontage(UAnimMontage* SourceMontage);
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void BeginRollInvincible();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void EndRollInvincible();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void OpenRollCancelWindow();
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Combat")
+	void FinishRoll();
 
 	/** Sets the soft collision response. True passes, False blocks */
 	void SetSoftCollision(bool bEnabled);

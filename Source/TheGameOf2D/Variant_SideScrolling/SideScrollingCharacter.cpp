@@ -82,6 +82,24 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 		GroundAttack4Montage = GroundAttack4Asset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> AirToFloorAttackAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/AM_Tomoe_AirToFloorAttack.AM_Tomoe_AirToFloorAttack"));
+	if (AirToFloorAttackAsset.Succeeded())
+	{
+		AirToFloorAttackMontage = AirToFloorAttackAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> RollAnimationAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Roll/Roll_F_0_Seq_Short.Roll_F_0_Seq_Short"));
+	if (RollAnimationAsset.Succeeded())
+	{
+		RollAnimation = RollAnimationAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> RollMontageAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Roll/AM_Tomoe_Roll.AM_Tomoe_Roll"));
+	if (RollMontageAsset.Succeeded())
+	{
+		RollMontage = RollMontageAsset.Object;
+	}
+
 	// configure the collision capsule
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
 
@@ -113,8 +131,8 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
 	GetCharacterMovement()->bConstrainToPlane = true;
 
-	// enable double jump and coyote time
-	JumpMaxCount = 3;
+	// Ground jump plus one air jump. Wall jump is handled separately.
+	JumpMaxCount = 2;
 }
 
 void ASideScrollingCharacter::BeginPlay()
@@ -194,6 +212,7 @@ void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* P
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &ASideScrollingCharacter::DoInteract);
 	PlayerInputComponent->BindKey(EKeys::J, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
+	PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoRoll);
 }
 
 void ASideScrollingCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -224,6 +243,7 @@ void ASideScrollingCharacter::Landed(const FHitResult& Hit)
 {
 	// reset the double jump
 	bHasDoubleJumped = false;
+	RestoreRollFallingMovement();
 
 	if (bAirToFloorAttackInProgress)
 	{
@@ -265,14 +285,34 @@ void ASideScrollingCharacter::DropReleased(const FInputActionValue& Value)
 
 void ASideScrollingCharacter::DoMove(float Forward)
 {
+	if (bRollInProgress)
+	{
+		RollMoveQueuedValue = Forward;
+		if (bRollCancelWindowOpen && !FMath::IsNearlyZero(Forward))
+		{
+			const float QueuedMove = Forward;
+			FinishRoll();
+			DoMove(QueuedMove);
+		}
+		return;
+	}
+
 	// is movement temporarily disabled after wall jumping?
 	if (!bHasWallJumped)
 	{
 		if (bAttackAnimationInProgress)
 		{
-			if (bGroundAttackMontageInProgress && bGroundMoveCancelWindowOpen && !FMath::IsNearlyZero(Forward))
+			if (bGroundMoveCancelWindowOpen && !FMath::IsNearlyZero(Forward) && (bGroundAttackMontageInProgress || CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorEnd))
 			{
-				FinishGroundAttackAndStartSheathe(true);
+				if (bGroundAttackMontageInProgress)
+				{
+					FinishGroundAttackAndStartSheathe(true);
+				}
+				else
+				{
+					StopActiveAirToFloorAttackMontage(0.04f);
+					StartSheatheOrRestoreAnimation();
+				}
 			}
 			else
 			{
@@ -317,6 +357,16 @@ void ASideScrollingCharacter::DoDrop(float Value)
 
 void ASideScrollingCharacter::DoJumpStart()
 {
+	if (bRollInProgress)
+	{
+		bRollJumpQueued = true;
+		if (bRollCancelWindowOpen)
+		{
+			TryConsumeRollQueuedInput();
+		}
+		return;
+	}
+
 	if (bAttackAnimationInProgress && !bAirToFloorAttackInProgress)
 	{
 		return;
@@ -399,6 +449,25 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoAttack()
 {
+	if (bRollInProgress)
+	{
+		const bool bAirRollInProgress = bRollPausedFalling || (GetCharacterMovement() && GetCharacterMovement()->IsFalling());
+		if (bAirRollInProgress)
+		{
+			StopActiveRollMontage(0.04f);
+			RestorePlayerAnimationBlueprint();
+			DoAttack();
+			return;
+		}
+
+		bRollAttackQueued = true;
+		if (bRollCancelWindowOpen)
+		{
+			TryConsumeRollQueuedInput();
+		}
+		return;
+	}
+
 	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
@@ -455,10 +524,86 @@ void ASideScrollingCharacter::DoAttack()
 	StartGroundAttackMontage();
 }
 
+void ASideScrollingCharacter::DoRoll()
+{
+	if (bRollInProgress || bAttackAnimationInProgress || (!RollMontage && !RollAnimation))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
+	if (!CharacterMesh || !AnimInstance)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+	}
+
+	MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	bRollInProgress = true;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	RollMoveQueuedValue = 0.0f;
+	bAttackAnimationInProgress = true;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+	PauseFallingForAirRoll();
+
+	const float SafePlayRate = FMath::Max(RollPlayRate, 0.1f);
+	const bool bRollMontageUsesExpectedSlot = RollMontage && RollMontage->SlotAnimTracks.ContainsByPredicate(
+		[this](const FSlotAnimationTrack& SlotTrack)
+		{
+			return SlotTrack.SlotName == RollSlotName;
+		});
+
+	if (bRollMontageUsesExpectedSlot)
+	{
+		ActiveRollMontage = RollMontage.Get();
+		const float Duration = AnimInstance->Montage_Play(ActiveRollMontage, SafePlayRate);
+		if (Duration <= 0.0f)
+		{
+			ActiveRollMontage = nullptr;
+		}
+	}
+	else
+	{
+		UAnimSequenceBase* RollAnimationToPlay = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Roll/Roll_F_0_Seq_Short.Roll_F_0_Seq_Short"));
+		if (!RollAnimationToPlay)
+		{
+			RollAnimationToPlay = RollAnimation.Get();
+		}
+
+		ActiveRollMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+			RollAnimationToPlay,
+			RollSlotName,
+			FMath::Max(RollBlendInTime, 0.0f),
+			FMath::Max(RollBlendOutTime, 0.0f),
+			SafePlayRate);
+	}
+
+	if (!ActiveRollMontage)
+	{
+		FinishRoll();
+		return;
+	}
+
+	FOnMontageEnded EndDelegate;
+	EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnRollMontageEnded);
+	AnimInstance->Montage_SetEndDelegate(EndDelegate, ActiveRollMontage);
+}
+
 void ASideScrollingCharacter::StartAirToFloorAttack()
 {
 	UAnimSequenceBase* StartAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Start_01_Seq.Attack_Air_To_Floor_Start_01_Seq"));
 	UAnimSequenceBase* LoopAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.Attack_Air_To_Floor_Loop_01_Seq"));
+
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
 
 	bAirToFloorAttackInProgress = true;
 	SetCombatWeaponDrawn(true);
@@ -481,11 +626,47 @@ void ASideScrollingCharacter::StartAirToFloorAttack()
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
 
+	if (CharacterMesh && PlayerAnimClass && CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
+	{
+		CharacterMesh->GlobalAnimRateScale = 1.0f;
+		CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		CharacterMesh->SetAnimInstanceClass(PlayerAnimClass);
+		AnimInstance = CharacterMesh->GetAnimInstance();
+	}
+
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
 		MovementComponent->Velocity.X = 0.0f;
 		MovementComponent->Velocity.Y = 0.0f;
 		MovementComponent->Velocity.Z = FMath::Min(MovementComponent->Velocity.Z, -900.0f);
+	}
+
+	if (bPlayAttackAnimation && AirToFloorAttackMontage && AnimInstance)
+	{
+		if (!bAttackAnimationInProgress)
+		{
+			MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+		}
+
+		ActiveAirToFloorAttackMontage = AirToFloorAttackMontage.Get();
+		bAttackAnimationInProgress = true;
+		CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::AirToFloorStart;
+
+		FOnMontageEnded EndDelegate;
+		EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnAirToFloorAttackMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(EndDelegate, ActiveAirToFloorAttackMontage);
+
+		const float Duration = AnimInstance->Montage_Play(ActiveAirToFloorAttackMontage, FMath::Max(AttackAnimationPlayRate, 0.1f));
+		if (Duration > 0.0f)
+		{
+			AnimInstance->Montage_JumpToSection(TEXT("Start"), ActiveAirToFloorAttackMontage);
+			AnimInstance->Montage_SetNextSection(TEXT("Start"), TEXT("Loop"), ActiveAirToFloorAttackMontage);
+			AnimInstance->Montage_SetNextSection(TEXT("Loop"), TEXT("Loop"), ActiveAirToFloorAttackMontage);
+			BeginAttackHitWindow();
+			return;
+		}
+
+		ActiveAirToFloorAttackMontage = nullptr;
 	}
 
 	const float StartDuration = PlayAirToFloorAnimation(StartAnimation ? StartAnimation : LoopAnimation, false, ESideScrollingCombatAnimationPhase::AirToFloorStart);
@@ -502,6 +683,17 @@ void ASideScrollingCharacter::BeginAirToFloorLoop()
 	if (!bAirToFloorAttackInProgress || !GetCharacterMovement() || !GetCharacterMovement()->IsFalling())
 	{
 		return;
+	}
+
+	if (ActiveAirToFloorAttackMontage)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+		{
+			AnimInstance->Montage_JumpToSection(TEXT("Loop"), ActiveAirToFloorAttackMontage);
+			AnimInstance->Montage_SetNextSection(TEXT("Loop"), TEXT("Loop"), ActiveAirToFloorAttackMontage);
+			CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::AirToFloorLoop;
+			return;
+		}
 	}
 
 	UAnimSequenceBase* LoopAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.Attack_Air_To_Floor_Loop_01_Seq"));
@@ -523,11 +715,72 @@ void ASideScrollingCharacter::FinishAirToFloorImpact()
 		EndAttackHitWindow();
 	}
 
+	if (ActiveAirToFloorAttackMontage)
+	{
+		bAirToFloorAttackInProgress = false;
+		CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::AirToFloorEnd;
+		if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+		{
+			AnimInstance->Montage_SetNextSection(TEXT("Loop"), TEXT("End"), ActiveAirToFloorAttackMontage);
+			AnimInstance->Montage_JumpToSection(TEXT("End"), ActiveAirToFloorAttackMontage);
+
+			const int32 EndSectionIndex = ActiveAirToFloorAttackMontage->GetSectionIndex(TEXT("End"));
+			const float EndSectionLength = EndSectionIndex != INDEX_NONE ? ActiveAirToFloorAttackMontage->GetSectionLength(EndSectionIndex) : 0.0f;
+			const float SafePlayRate = FMath::Max(AttackAnimationPlayRate, 0.1f);
+			if (EndSectionLength > 0.0f)
+			{
+				GetWorld()->GetTimerManager().SetTimer(AttackAnimationTimer, this, &ASideScrollingCharacter::FinishAttackAnimation, EndSectionLength / SafePlayRate, false);
+			}
+		}
+		else
+		{
+			StartSheatheOrRestoreAnimation();
+		}
+		return;
+	}
+
 	bAirToFloorAttackInProgress = false;
 	const float EndDuration = PlayAirToFloorAnimation(EndAnimation, false, ESideScrollingCombatAnimationPhase::AirToFloorEnd);
 	if (EndDuration <= 0.0f)
 	{
 		StartSheatheOrRestoreAnimation();
+	}
+}
+
+void ASideScrollingCharacter::OnAirToFloorAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveAirToFloorAttackMontage)
+	{
+		return;
+	}
+
+	ActiveAirToFloorAttackMontage = nullptr;
+	if (bInterrupted)
+	{
+		RestorePlayerAnimationBlueprint();
+		ResetAttackCombo();
+		SetCombatWeaponDrawn(false);
+		return;
+	}
+
+	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorEnd || !bAirToFloorAttackInProgress)
+	{
+		StartSheatheOrRestoreAnimation();
+	}
+}
+
+void ASideScrollingCharacter::StopActiveAirToFloorAttackMontage(float BlendOutTime)
+{
+	UAnimMontage* MontageToStop = ActiveAirToFloorAttackMontage;
+	ActiveAirToFloorAttackMontage = nullptr;
+	if (!MontageToStop)
+	{
+		return;
+	}
+
+	if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		AnimInstance->Montage_Stop(FMath::Max(BlendOutTime, 0.0f), MontageToStop);
 	}
 }
 
@@ -656,7 +909,7 @@ void ASideScrollingCharacter::CommitGroundCombo()
 
 void ASideScrollingCharacter::OpenGroundMoveCancelWindow()
 {
-	if (bGroundAttackMontageInProgress)
+	if (bGroundAttackMontageInProgress || CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorEnd)
 	{
 		bGroundMoveCancelWindowOpen = true;
 	}
@@ -788,6 +1041,7 @@ void ASideScrollingCharacter::FinishGroundAttackMontageState(bool bInterrupted)
 	CurrentGroundComboStep = 0;
 	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 	ActiveGroundAttackMontage = nullptr;
+	ActiveAirToFloorAttackMontage = nullptr;
 	SetCombatWeaponDrawn(false);
 
 	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
@@ -1231,6 +1485,142 @@ void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
 	}
 }
 
+void ASideScrollingCharacter::BeginRollInvincible()
+{
+	if (bRollInProgress)
+	{
+		bRollInvincible = true;
+	}
+}
+
+void ASideScrollingCharacter::EndRollInvincible()
+{
+	bRollInvincible = false;
+}
+
+void ASideScrollingCharacter::OpenRollCancelWindow()
+{
+	if (bRollInProgress)
+	{
+		bRollCancelWindowOpen = true;
+		TryConsumeRollQueuedInput();
+	}
+}
+
+void ASideScrollingCharacter::FinishRoll()
+{
+	StopActiveRollMontage(0.08f);
+	ActiveRollMontage = nullptr;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	RollMoveQueuedValue = 0.0f;
+	RestorePlayerAnimationBlueprint();
+}
+
+void ASideScrollingCharacter::OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveRollMontage)
+	{
+		return;
+	}
+
+	FinishRoll();
+}
+
+void ASideScrollingCharacter::StopActiveRollMontage(float BlendOutTime)
+{
+	UAnimMontage* MontageToStop = ActiveRollMontage;
+	ActiveRollMontage = nullptr;
+	if (!MontageToStop)
+	{
+		return;
+	}
+
+	if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		AnimInstance->Montage_Stop(FMath::Max(BlendOutTime, 0.0f), MontageToStop);
+	}
+}
+
+void ASideScrollingCharacter::PauseFallingForAirRoll()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!MovementComponent || !MovementComponent->IsFalling() || bRollPausedFalling)
+	{
+		return;
+	}
+
+	bRollPausedFalling = true;
+	SavedRollGravityScale = MovementComponent->GravityScale;
+	MovementComponent->Velocity.Z = 0.0f;
+	MovementComponent->GravityScale = 0.0f;
+}
+
+void ASideScrollingCharacter::RestoreRollFallingMovement()
+{
+	if (!bRollPausedFalling)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->GravityScale = SavedRollGravityScale;
+		if (MovementComponent->IsFalling())
+		{
+			MovementComponent->Velocity.Z = FMath::Min(MovementComponent->Velocity.Z, 0.0f);
+		}
+	}
+
+	bRollPausedFalling = false;
+}
+
+void ASideScrollingCharacter::TryConsumeRollQueuedInput()
+{
+	if (!bRollInProgress || !bRollCancelWindowOpen)
+	{
+		return;
+	}
+
+	if (bRollAttackQueued)
+	{
+		StopActiveRollMontage(0.04f);
+		bRollInProgress = false;
+		bRollCancelWindowOpen = false;
+		bRollInvincible = false;
+		bRollAttackQueued = false;
+		bRollJumpQueued = false;
+		RollMoveQueuedValue = 0.0f;
+		RestorePlayerAnimationBlueprint();
+		DoAttack();
+		return;
+	}
+
+	if (bRollJumpQueued)
+	{
+		StopActiveRollMontage(0.04f);
+		bRollInProgress = false;
+		bRollCancelWindowOpen = false;
+		bRollInvincible = false;
+		bRollAttackQueued = false;
+		bRollJumpQueued = false;
+		RollMoveQueuedValue = 0.0f;
+		RestorePlayerAnimationBlueprint();
+		DoJumpStart();
+		return;
+	}
+
+	if (!FMath::IsNearlyZero(RollMoveQueuedValue))
+	{
+		const float QueuedMove = RollMoveQueuedValue;
+		FinishRoll();
+		DoMove(QueuedMove);
+	}
+}
+
 void ASideScrollingCharacter::FinishAttackAnimation()
 {
 	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing)
@@ -1266,6 +1656,8 @@ void ASideScrollingCharacter::FinishAttackAnimation()
 
 void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 {
+	RestoreRollFallingMovement();
+
 	USkeletalMeshComponent* CharacterMesh = GetMesh();
 	if (!CharacterMesh)
 	{
@@ -1283,6 +1675,15 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
 	ActiveCombatTransitionMontage = nullptr;
+	ActiveAirToFloorAttackMontage = nullptr;
+	ActiveRollMontage = nullptr;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	bRollPausedFalling = false;
+	RollMoveQueuedValue = 0.0f;
 	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 
 	if (PlayerAnimClass && CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
@@ -1309,12 +1710,20 @@ void ASideScrollingCharacter::InterruptAttackAnimation()
 	bAttackHitPending = false;
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	RollMoveQueuedValue = 0.0f;
 	RestorePlayerAnimationBlueprint();
 	ResetAttackCombo();
 }
 
 void ASideScrollingCharacter::ResetAttackCombo()
 {
+	RestoreRollFallingMovement();
+
 	CurrentAttackDamageMultiplier = 1.0f;
 	CurrentAttackKnockbackDistance = AttackKnockbackDistance;
 	CurrentWeaponTraceRadius = WeaponTraceRadius;
@@ -1327,7 +1736,16 @@ void ASideScrollingCharacter::ResetAttackCombo()
 	bGroundComboInputWindowOpen = false;
 	bGroundMoveCancelWindowOpen = false;
 	bAirToFloorAttackInProgress = false;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	bRollPausedFalling = false;
+	RollMoveQueuedValue = 0.0f;
 	ActiveGroundAttackMontage = nullptr;
+	ActiveAirToFloorAttackMontage = nullptr;
+	ActiveRollMontage = nullptr;
 }
 
 void ASideScrollingCharacter::UpdateFacingDirection(float FacingSign)
@@ -1486,8 +1904,8 @@ void ASideScrollingCharacter::MultiJump()
 				// raise the double jump flag
 				bHasDoubleJumped = true;
 
-				// let the CMC handle jump
-				Jump();
+				const float DoubleJumpZVelocity = GetCharacterMovement()->JumpZVelocity * DoubleJumpVerticalMultiplier;
+				LaunchCharacter(FVector(0.0f, 0.0f, DoubleJumpZVelocity), false, true);
 			}
 		}
 	}

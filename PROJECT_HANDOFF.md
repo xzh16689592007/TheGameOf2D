@@ -89,9 +89,15 @@
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_03_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_04_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_All_Seq.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/AM_Tomoe_AirToFloorAttack.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Start_01_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_End_01_Seq.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Jump/Jump_Start_0_Seq.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Jump/Jump_Loop_0_Seq.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Jump/Jump_Stop_0_Seq.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Roll/AM_Tomoe_Roll.uasset`
+  - `Content/MoDeng/Animations/Tomoe/Roll/Roll_F_0_Seq_Short.uasset`
   - `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_To_Idle_Combat_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_Seq.uasset`
@@ -286,11 +292,19 @@
     - `BeginGroundAttackTrace` and `EndGroundAttackTrace` notifies define the authored damage window for each ground hit. `ComboStepIndex` must be 1, 2, 3, or 4 on the begin notify.
     - The fourth ground attack now supports looping back into step 1 when attack input is queued before `Loop Ground Combo`; otherwise it continues to `FinishGroundAttack` and sheathes.
     - Ground combo movement and jumping are blocked while the attack montage is in progress.
-    - Air-to-floor attack remains direct sequence playback for now:
-      - `Attack_Air_To_Floor_Start_01_Seq`
-      - `Attack_Air_To_Floor_Loop_01_Seq`
-      - `Attack_Air_To_Floor_End_01_Seq`
+    - Air-to-floor attack now uses `AirToFloorAttackMontage` -> `AM_Tomoe_AirToFloorAttack` on `DefaultGroup.GroundAttackSlot`.
+      - Montage sections must be named exactly `Start`, `Loop`, and `End`.
+      - C++ starts at `Start`, loops `Loop` while airborne, and jumps to `End` when `Landed()` fires.
+      - `End` has a timer fallback based on section length so the player does not get stuck if the montage end delegate is missed.
+      - The old direct sequence playback path remains as a fallback if the montage asset is missing.
     - Air-to-floor attack still preserves downward motion and plays the end/landing impact when the character lands.
+    - `SideScrollingAnimNotify_OpenGroundMoveCancelWindow` shows in UE as `OpenGroundMoveCancelWindow`; it is an alias for the older `Open Move Cancel Window` notify and allows movement to cancel the air-to-floor `End` recovery.
+    - `OpenGroundMoveCancelWindow` is optional for basic recovery because C++ now auto-restores after the `End` section, but it is useful for making the recovery cancellable by movement.
+    - Right mouse button calls `DoRoll()`.
+    - Roll uses `RollMontage` / `AM_Tomoe_Roll` when the montage slot matches `GroundAttackSlot`; otherwise C++ falls back to a dynamic montage from `Roll_F_0_Seq_Short`.
+    - Air rolls temporarily pause falling by saving `GravityScale`, setting gravity to `0`, and zeroing vertical velocity. Roll cleanup restores gravity.
+    - Pressing attack during an air roll immediately interrupts the roll and starts the air-to-floor attack, without waiting for the roll cancel window.
+    - Roll notifies include `BeginRollInvincible`, `EndRollInvincible`, `OpenRollCancelWindow`, and `FinishRoll`.
     - `Idle_Combat_To_Idle_Seq` is still used as the sheath/restore animation through `CombatToIdleAnimation`.
     - Sheath/restore now prefers dynamic montage playback on `CombatTransitionSlotName` instead of hard-switching the mesh to single-node animation.
     - `CombatTransitionSlotName`, `CombatTransitionBlendInTime`, `CombatTransitionBlendOutTime`, and `CombatTransitionAnimationPlayRate` control sheath/restore slot playback.
@@ -326,9 +340,10 @@
 ## Current Controls
 
 - Move: side-scrolling template movement input.
-- Jump: template jump input.
+- Jump: template jump input. `JumpMaxCount = 2`, so the player has one air jump.
 - Repair/interact: `E` or `F`.
 - Attack: left mouse button or `J`.
+- Roll/dodge: right mouse button.
 
 ## Current Visual Asset State
 
@@ -529,29 +544,27 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone before the current pending commit: commit `f42d5d1` is pulled from `origin/main`. Tomoe jump/fall locomotion, montage-driven ground combo, and ground combo cancel/loop notifies are already on GitHub.
+Latest synced milestone before the current player-movement commit: commit `acdf3ec` is pulled from `origin/main`. The second-level Boss encounter, explosion/fire-field helpers, level-complete menu, Tomoe jump/fall locomotion, montage-driven ground combo, and ground combo cancel/loop notifies are already on GitHub.
 
-Current pending update in this handoff:
+Current player update in this handoff:
 
-- Boss C++ was expanded into a fuller second-level encounter:
-  - Reaper mesh/animation loadout remains the Boss visual.
-  - Scythe melee is the base attack.
-  - Timed ranged projectile volley, area explosion, and minion summon skills are active.
-  - Health-threshold damage reduction shield remains represented by health-bar color only.
-  - First drop below half health triggers a one-time invulnerable fire-field phase: health returns to 50%, Boss cannot move/attack, fire expands from the feet with continuous damage, then a final explosion fires and normal Boss logic resumes.
-- Added `AModengBossFireField` as the expanding Boss fire-field visual/damage helper.
-- Added `AModengExplosionEffect` as a reusable native explosion VFX actor for exploder enemies and Boss skills.
-- Fast and exploder enemy visuals were swapped:
-  - Fast enemy now uses the heavier/brute skeleton look and carries an axe.
-  - Exploder enemy now uses the lighter/unarmed skeleton look.
-  - Exploder self-destruct now spawns the native explosion effect.
-- Enemy facing was cleaned up so melee, ranged, and Boss attacks face the lantern target before attacking. This fixes reversed attack orientation after right-side spawns.
-- First-level victory now opens a C++ level-complete result menu with Restart, Next Level, and Quit instead of immediately traveling.
-- Side-scrolling camera now snaps to a newly possessed pawn and has wider left bounds so shifted Level 2 spawn points do not start with the player off-screen.
-- Level 2 Bridge Market external actor assets were modified/added in UE. Treat the changed `Content/__ExternalActors__/MoDeng/Maps/L_Level02_BridgeMarket` files as part of the current Level 2 state.
+- Added player double jump in C++ (`JumpMaxCount = 2`, custom second-jump launch using `DoubleJumpVerticalMultiplier`).
+- Added right mouse roll/dodge:
+  - `Roll_F_0_Seq_Short` and `AM_Tomoe_Roll` under `Content/MoDeng/Animations/Tomoe/Roll`.
+  - Native roll notifies for invincibility, cancel window, and finish.
+  - Air roll pauses falling and restores gravity on all roll cleanup paths.
+  - Air roll can be interrupted by attack at any time to start the air-to-floor attack.
+- Added `AM_Tomoe_AirToFloorAttack` as a three-section montage (`Start`, `Loop`, `End`) under `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01`.
+- C++ now drives air-to-floor attack through that montage:
+  - Plays `Start`, loops `Loop` while airborne, jumps to `End` on landing, then restores/sheathes.
+  - `End` section has a timer fallback to prevent the player from getting stuck after landing.
+  - Direct sequence playback remains as fallback if the montage cannot play.
+- Added `SideScrollingAnimNotify_OpenGroundMoveCancelWindow`, displayed in UE as `OpenGroundMoveCancelWindow`, as a searchable alias for the existing movement-cancel notify.
+- `OpenGroundMoveCancelWindow` / `Open Move Cancel Window` now also works during the air-to-floor `End` phase.
+- Added/updated Tomoe jump assets under `Content/MoDeng/Animations/Tomoe/Jump`.
 - A full build after these C++ changes succeeded on 2026-06-17 with:
   - `Result: Succeeded`
-- `outputs/`, `tools/`, and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in this gameplay commit.
+- `outputs/`, `tools/`, and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
 
 ## Git Setup And Notes
 
@@ -593,8 +606,9 @@ git lfs pull
   - Combo chaining is driven by native montage notifies, not by old `AttackComboSteps` or direct `PlayAnimation()` ground combo code.
   - Current priority: validate the new cancel/loop notify timing in PIE: movement should only cancel after `Open Move Cancel Window`, and attack queued before `Loop Ground Combo` on step 4 should restart at step 1.
   - Keep `Combo_Attack_02_All_Seq` only as a visual timing/pose reference for natural section-to-section connection.
-  - Attack damage timing for ground combo is now authored by `BeginGroundAttackTrace` / `EndGroundAttackTrace` notifies. Air-to-floor attack still uses direct sequence playback and C++ trace logic.
-  - Air-to-floor landing should transition into sheath/restore, not replay the landing attack end animation. If this regresses, inspect the single-node animation to AnimBP transition before changing animation assets.
+  - Attack damage timing for ground combo is authored by `BeginGroundAttackTrace` / `EndGroundAttackTrace` notifies. Air-to-floor attack currently opens the attack trace window from C++ and closes it on landing.
+  - Air-to-floor landing should transition into `AM_Tomoe_AirToFloorAttack` section `End`, then sheath/restore. If this regresses, first inspect section names (`Start`, `Loop`, `End`) and slot (`DefaultGroup.GroundAttackSlot`) before changing C++.
+  - Air-to-floor `End` movement cancel can be tuned by placing `OpenGroundMoveCancelWindow` / `Open Move Cancel Window` in the montage timeline.
   - Tomoe base locomotion now has idle/run/jump-start/fall-loop. Landing polish is still not implemented as a dedicated state.
   - Use only Tomoe-compatible or Tomoe-retargeted animation assets in `ABP_Tomoe_SideScroller`; using the modular skeleton enemy jump animations directly causes body deformation.
 - Visible katana setup works, but socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
@@ -633,11 +647,19 @@ git lfs pull
    - Attack again during sheath: sheath should stop and a new attack should begin immediately.
    - Test air-to-floor attack landing: it should play the landing impact/end, then sheath, without replaying the landing attack end in place.
 
-6. Clean up combat debug visuals for normal playtests:
+6. Validate roll and air-to-floor attack:
+   - Right mouse should play `AM_Tomoe_Roll`.
+   - Air roll should pause falling briefly and then resume gravity when roll ends.
+   - Press attack during air roll: roll should interrupt immediately into air-to-floor attack.
+   - Air-to-floor attack should play `Start`, loop `Loop` while airborne, jump to `End` on landing, then restore movement.
+   - Searchable movement-cancel notify names are `OpenGroundMoveCancelWindow` and `Open Move Cancel Window`; place one in the latter half of the air-to-floor `End` section if recovery should be cancellable.
+   - If the character gets stuck after landing, check that `AM_Tomoe_AirToFloorAttack` has exact section names `Start`, `Loop`, `End` and uses `DefaultGroup.GroundAttackSlot`.
+
+7. Clean up combat debug visuals for normal playtests:
    - Disable `bDrawWeaponTraceDebug` unless actively debugging blade contact.
    - Cyan/red/silver weapon traces are useful for tuning, but they dominate gameplay footage.
 
-7. Tune the four-montage ground combo cancel and loop windows:
+8. Tune the four-montage ground combo cancel and loop windows:
    - Open `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.uasset` through `AM_Tomoe_GroundAttack_4.uasset`.
    - Confirm all four use `DefaultGroup.GroundAttackSlot`.
    - Confirm `ABP_Tomoe_SideScroller` root motion mode is `Root Motion from Montages Only`.
@@ -648,30 +670,30 @@ git lfs pull
    - If input feels too strict, tune notify positions first, not C++.
    - Use `Combo_Attack_02_All_Seq` as the reference for natural body-pose connection points.
 
-8. Polish draw/sheath flow:
+9. Polish draw/sheath flow:
    - Confirm `CombatToIdleAnimation` on `BP_SideScrollingCharacter` points to `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`.
    - Keep the initial sword state as sheathed: hand sword hidden, sheathed sword visible.
    - Add or tune weapon visibility notifies later if the hand/sheathed sword swap needs exact frame timing.
 
-9. Add attack hit feedback:
+10. Add attack hit feedback:
    - Add short hit stop on successful player melee hit.
    - Add enemy hit flash/material flash.
    - Add sword whoosh and hit SFX.
    - Add simple hit VFX / slash trail from an existing project asset or a newly imported VFX pack; the previous `SwordAnimsetPro` project-local test content was removed.
 
-10. Tune ground attack hit windows:
+11. Tune ground attack hit windows:
    - `BeginGroundAttackTrace` should be near visible blade contact.
    - `EndGroundAttackTrace` should be after the blade leaves the hit area.
    - Set `ComboStepIndex` on each begin notify: 1, 2, 3, 4.
    - Enable `bDrawWeaponTraceDebug` temporarily if a visible blade pass misses.
 
-11. Polish Tomoe jump/fall locomotion:
+12. Polish Tomoe jump/fall locomotion:
    - Current `JumpStart` / `FallLoop` split is working.
    - Add a dedicated `Land` state only if it does not make movement feel sticky.
    - Tune transition blend duration between `JumpStart` and `FallLoop` if the pose pops.
    - Keep using Tomoe-compatible or Tomoe-retargeted jump/fall animations; do not use enemy skeleton animations directly.
 
-12. Continue polishing Tomoe player setup:
+13. Continue polishing Tomoe player setup:
    - Open `BP_SideScrollingCharacter`.
    - Confirm `CharacterMesh0` and class default `PlayerSkeletalMesh` both point to `SK_SAMURAIGIRL_01`.
    - Confirm class default `PlayerAnimClass` points to `ABP_Tomoe_SideScroller`.
@@ -680,7 +702,7 @@ git lfs pull
    - If ground attacks move too far or snap, check the root motion settings on the four `Combo_Attack_02_0*_Seq` assets and the AnimBP root motion mode.
    - For reflected C++ changes, close UE and full-build instead of using Live Coding.
 
-13. Tune the visible katana/weapon:
+14. Tune the visible katana/weapon:
    - Verify `Socket_Katana_R` is on Tomoe's real `hand_r` bone, not `ik_hand_r`.
    - Verify the `Katana` component in `BP_SideScrollingCharacter` uses `SM_Katana`, parent socket `Socket_Katana_R`, and `NoCollision`.
    - Verify `KatanaTraceStart` and `KatanaTraceEnd` remain children of `Katana`.
@@ -688,12 +710,12 @@ git lfs pull
    - Tune socket transform in `SKEL_Tomoe_Skeleton` until the grip sits naturally in the right hand.
    - Keep C++ hit detection separate from weapon mesh collision for now.
 
-14. Later: give fast and exploder enemies distinct polished visuals:
+15. Later: give fast and exploder enemies distinct polished visuals:
    - Fast enemy can be smaller/lighter/faster-looking.
    - Exploder enemy can be larger/redder/more volatile-looking.
    - They currently remain acceptable placeholders because their shapes distinguish enemy types.
 
-15. Later: upgrade enemy movement beyond X-axis:
+16. Later: upgrade enemy movement beyond X-axis:
    - Route point system for platform levels.
    - Flying enemy.
    - Ranged enemy.
