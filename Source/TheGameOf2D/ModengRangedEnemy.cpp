@@ -54,6 +54,7 @@ void AModengRangedEnemy::AttackTarget(float DeltaSeconds)
 	}
 
 	TimeUntilNextAttack = AttackInterval;
+	FaceTargetLantern();
 	PlayAttackAnimation();
 
 	GetWorld()->GetTimerManager().ClearTimer(ProjectileFireTimer);
@@ -145,6 +146,7 @@ void AModengRangedEnemy::FireProjectile()
 	}
 
 	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	FaceTargetLantern();
 	const FVector SpawnOffset = FVector(
 		FMath::IsNearlyZero(DirectionX) ? ProjectileSpawnOffset.X : ProjectileSpawnOffset.X * DirectionX,
 		ProjectileSpawnOffset.Y,

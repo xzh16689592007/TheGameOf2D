@@ -21,6 +21,16 @@
 void UModengResultWidget::SetResult(bool bInPlayerWon)
 {
 	bPlayerWon = bInPlayerWon;
+	bLevelComplete = false;
+	NextLevelName = NAME_None;
+	RefreshResultText();
+}
+
+void UModengResultWidget::SetLevelComplete(FName InNextLevelName)
+{
+	bPlayerWon = true;
+	bLevelComplete = true;
+	NextLevelName = InNextLevelName;
 	RefreshResultText();
 }
 
@@ -38,6 +48,12 @@ void UModengResultWidget::NativeConstruct()
 	{
 		RestartButton->OnClicked.RemoveDynamic(this, &UModengResultWidget::HandleRestartClicked);
 		RestartButton->OnClicked.AddDynamic(this, &UModengResultWidget::HandleRestartClicked);
+	}
+
+	if (NextLevelButton)
+	{
+		NextLevelButton->OnClicked.RemoveDynamic(this, &UModengResultWidget::HandleNextLevelClicked);
+		NextLevelButton->OnClicked.AddDynamic(this, &UModengResultWidget::HandleNextLevelClicked);
 	}
 
 	if (QuitButton)
@@ -115,6 +131,16 @@ void UModengResultWidget::BuildWidgetTreeIfNeeded()
 		RestartSlot->SetPadding(FMargin(0.0f, 0.0f, 12.0f, 0.0f));
 	}
 
+	NextLevelButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("NextLevelButton"));
+	UTextBlock* NextLevelLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("NextLevelLabel"));
+	NextLevelLabel->SetText(FText::FromString(TEXT("Next Level")));
+	ApplyTextStyle(NextLevelLabel, 20);
+	NextLevelButton->AddChild(NextLevelLabel);
+	if (UHorizontalBoxSlot* NextLevelSlot = ButtonRow->AddChildToHorizontalBox(NextLevelButton))
+	{
+		NextLevelSlot->SetPadding(FMargin(12.0f, 0.0f, 12.0f, 0.0f));
+	}
+
 	QuitButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("QuitButton"));
 	UTextBlock* QuitLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("QuitLabel"));
 	QuitLabel->SetText(FText::FromString(TEXT("Quit")));
@@ -130,15 +156,22 @@ void UModengResultWidget::RefreshResultText()
 {
 	if (ResultTitleText)
 	{
-		ResultTitleText->SetText(bPlayerWon ? FText::FromString(TEXT("Victory")) : FText::FromString(TEXT("Defeat")));
+		ResultTitleText->SetText(bLevelComplete ? FText::FromString(TEXT("Level Complete")) : (bPlayerWon ? FText::FromString(TEXT("Victory")) : FText::FromString(TEXT("Defeat"))));
 		ResultTitleText->SetColorAndOpacity(bPlayerWon ? FSlateColor(FLinearColor(0.55f, 1.0f, 0.62f)) : FSlateColor(FLinearColor(1.0f, 0.36f, 0.3f)));
 	}
 
 	if (ResultBodyText)
 	{
-		ResultBodyText->SetText(bPlayerWon
+		ResultBodyText->SetText(bLevelComplete
+			? FText::FromString(TEXT("The first street is clear. Restart this level, continue to the next one, or quit."))
+			: (bPlayerWon
 			? FText::FromString(TEXT("All waves have been cleared. The lantern line holds."))
-			: FText::FromString(TEXT("Every lantern has gone dark. Repair faster and hold the line.")));
+			: FText::FromString(TEXT("Every lantern has gone dark. Repair faster and hold the line."))));
+	}
+
+	if (NextLevelButton)
+	{
+		NextLevelButton->SetVisibility(bLevelComplete && !NextLevelName.IsNone() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 }
 
@@ -174,6 +207,18 @@ void UModengResultWidget::HandleRestartClicked()
 
 	const FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
 	UGameplayStatics::OpenLevel(this, FName(*LevelName));
+}
+
+void UModengResultWidget::HandleNextLevelClicked()
+{
+	if (NextLevelName.IsNone())
+	{
+		return;
+	}
+
+	RestoreGameplayInput();
+	RemoveFromParent();
+	UGameplayStatics::OpenLevel(this, NextLevelName);
 }
 
 void UModengResultWidget::HandleQuitClicked()

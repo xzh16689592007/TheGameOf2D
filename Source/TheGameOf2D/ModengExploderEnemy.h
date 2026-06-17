@@ -6,6 +6,8 @@
 #include "ModengEnemy.h"
 #include "ModengExploderEnemy.generated.h"
 
+class AModengExplosionEffect;
+
 UCLASS()
 class THEGAMEOF2D_API AModengExploderEnemy : public AModengEnemy
 {
@@ -17,4 +19,7 @@ public:
 protected:
 	virtual void AttackTarget(float DeltaSeconds) override;
 	virtual void ApplyEnemyLoadout() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion")
+	TSubclassOf<AModengExplosionEffect> ExplosionEffectClass;
 };

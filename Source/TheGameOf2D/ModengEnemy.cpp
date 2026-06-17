@@ -41,6 +41,14 @@ AModengEnemy::AModengEnemy()
 	EnemyBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	EnemyBody->SetCastShadow(false);
 
+	EnemyWeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EnemyWeaponMesh"));
+	EnemyWeaponMesh->SetupAttachment(GetMesh());
+	EnemyWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EnemyWeaponMesh->SetGenerateOverlapEvents(false);
+	EnemyWeaponMesh->SetCastShadow(true);
+	EnemyWeaponMesh->SetHiddenInGame(true);
+	EnemyWeaponMesh->SetVisibility(false);
+
 	HealthBarComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
 	HealthBarComponent->SetupAttachment(RootComponent);
 	HealthBarComponent->SetRelativeLocation(HealthBarRelativeLocation);
@@ -185,6 +193,7 @@ void AModengEnemy::Tick(float DeltaSeconds)
 	else
 	{
 		UpdateLocomotionAnimation(false);
+		FaceTargetLantern();
 		AttackTarget(DeltaSeconds);
 	}
 }
@@ -227,7 +236,7 @@ void AModengEnemy::MoveTowardTarget(float DeltaSeconds)
 
 	const FVector NewLocation = GetActorLocation() + FVector(DirectionX * MoveSpeed * DeltaSeconds, 0.0f, 0.0f);
 	SetActorLocation(NewLocation, false);
-	SetActorRotation(FRotator(0.0f, DirectionX > 0.0f ? 0.0f : 180.0f, 0.0f));
+	FaceTargetLantern();
 	UpdateLocomotionAnimation(true);
 }
 
@@ -245,6 +254,7 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	}
 
 	TimeUntilNextAttack = AttackInterval;
+	FaceTargetLantern();
 	PlayAttackAnimation();
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
 
@@ -340,6 +350,7 @@ void AModengEnemy::ApplyEnemyLoadout()
 	}
 
 	EnemySkeletalMeshParts.Empty();
+	EnemyWeaponSkeletalMesh = nullptr;
 	const TCHAR* WarriorParts[] = {
 		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Chestpiece.SK_Chestpiece"),
 		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Boots.SK_Boots"),
@@ -347,8 +358,7 @@ void AModengEnemy::ApplyEnemyLoadout()
 		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helm.SK_Helm"),
 		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_L_01.SK_ShoulderPad_L_01"),
 		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_R_01.SK_ShoulderPad_R_01"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Belt.SK_Belt"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/Weapons/SK_Sword_1h.SK_Sword_1h")
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Belt.SK_Belt")
 	};
 	for (const TCHAR* PartPath : WarriorParts)
 	{
@@ -356,6 +366,11 @@ void AModengEnemy::ApplyEnemyLoadout()
 		{
 			EnemySkeletalMeshParts.Add(MeshPart);
 		}
+	}
+
+	if (USkeletalMesh* WarriorSword = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Meshes/Weapons/SK_Sword_1h.SK_Sword_1h")))
+	{
+		EnemyWeaponSkeletalMesh = WarriorSword;
 	}
 
 	if (UAnimSequenceBase* WarriorIdleAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Idle_WeaponR.Skeleton_Anim_Idle_WeaponR")))
@@ -382,6 +397,22 @@ void AModengEnemy::ApplyEnemyLoadout()
 	{
 		DeathAnimation = WarriorDeathAnimation;
 	}
+}
+
+void AModengEnemy::FaceTargetLantern()
+{
+	if (!TargetLantern)
+	{
+		return;
+	}
+
+	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	if (FMath::IsNearlyZero(DirectionX))
+	{
+		return;
+	}
+
+	SetActorRotation(FRotator(0.0f, DirectionX > 0.0f ? 0.0f : 180.0f, 0.0f));
 }
 
 void AModengEnemy::ConfigureEnemyVisuals()
@@ -418,6 +449,7 @@ void AModengEnemy::ConfigureEnemyVisuals()
 	}
 
 	ConfigureEnemyMeshParts(bHasSkeletalVisual);
+	ConfigureEnemyWeapon(bHasSkeletalVisual);
 
 	UMeshComponent* VisualMesh = bHasSkeletalVisual ? Cast<UMeshComponent>(GetMesh()) : Cast<UMeshComponent>(EnemyBody);
 	if (!bOverrideBodyMaterialColor || !VisualMesh)
@@ -472,6 +504,36 @@ void AModengEnemy::ConfigureEnemyMeshParts(bool bHasSkeletalVisual)
 		MeshPart->SetRelativeScale3D(FVector::OneVector);
 		MeshPart->SetLeaderPoseComponent(GetMesh());
 	}
+}
+
+void AModengEnemy::ConfigureEnemyWeapon(bool bHasSkeletalVisual)
+{
+	if (!EnemyWeaponMesh)
+	{
+		return;
+	}
+
+	const bool bUseWeapon = bHasSkeletalVisual && EnemyWeaponSkeletalMesh && GetMesh();
+	EnemyWeaponMesh->SetHiddenInGame(!bUseWeapon);
+	EnemyWeaponMesh->SetVisibility(bUseWeapon);
+	EnemyWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EnemyWeaponMesh->SetGenerateOverlapEvents(false);
+
+	if (!bUseWeapon)
+	{
+		EnemyWeaponMesh->SetSkeletalMesh(nullptr);
+		return;
+	}
+
+	EnemyWeaponMesh->SetSkeletalMesh(EnemyWeaponSkeletalMesh);
+	const FName AttachSocketName = GetMesh()->DoesSocketExist(EnemyWeaponAttachSocketName)
+		? EnemyWeaponAttachSocketName
+		: EnemyWeaponAttachFallbackBoneName;
+
+	EnemyWeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+	EnemyWeaponMesh->SetRelativeLocation(EnemyWeaponRelativeLocation);
+	EnemyWeaponMesh->SetRelativeRotation(EnemyWeaponRelativeRotation);
+	EnemyWeaponMesh->SetRelativeScale3D(EnemyWeaponScale);
 }
 
 void AModengEnemy::SetEnemyBodyColor(const FLinearColor& Color)

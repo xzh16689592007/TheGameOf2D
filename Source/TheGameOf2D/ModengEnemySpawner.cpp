@@ -277,7 +277,7 @@ bool AModengEnemySpawner::ShouldSpawnBossThisWave() const
 	return bSpawnBossOnFinalWave && BossEnemyClass && CurrentWave == TotalWaves;
 }
 
-bool AModengEnemySpawner::ShouldLoadSecondLevelOnVictory() const
+bool AModengEnemySpawner::ShouldShowLevelCompleteMenuOnVictory() const
 {
 	return bAutoLoadSecondLevelAfterLevelOne && IsCurrentLevel(LevelOneName) && !LevelTwoName.IsNone() && DoesConfiguredSecondLevelExist();
 }
@@ -296,14 +296,6 @@ void AModengEnemySpawner::ApplyCurrentLevelDefaults()
 	SpawnInterval = FMath::Min(SpawnInterval, 3.0f);
 	bSpawnBossOnFinalWave = true;
 	BossCountFinalWave = FMath::Max(BossCountFinalWave, 1);
-}
-
-void AModengEnemySpawner::OpenConfiguredSecondLevel()
-{
-	if (!LevelTwoName.IsNone())
-	{
-		UGameplayStatics::OpenLevel(this, LevelTwoName);
-	}
 }
 
 void AModengEnemySpawner::CheckWaveProgress()
@@ -359,19 +351,11 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 		GEngine->AddOnScreenDebugMessage(-1, 8.0f, bPlayerWon ? FColor::Green : FColor::Red, bPlayerWon ? TEXT("Victory: all waves cleared") : TEXT("Defeat: all lanterns extinguished"));
 	}
 
-	if (bPlayerWon && ShouldLoadSecondLevelOnVictory())
+	if (bPlayerWon && ShouldShowLevelCompleteMenuOnVictory())
 	{
 		OnVictory.Broadcast();
 		OnGameEnded.Broadcast(true);
-
-		if (LevelTravelDelay > 0.0f)
-		{
-			GetWorld()->GetTimerManager().SetTimer(LevelTravelTimer, this, &AModengEnemySpawner::OpenConfiguredSecondLevel, LevelTravelDelay, false);
-		}
-		else
-		{
-			OpenConfiguredSecondLevel();
-		}
+		ShowLevelCompleteWidget();
 		return;
 	}
 
@@ -386,6 +370,38 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 
 	OnGameEnded.Broadcast(bPlayerWon);
 	ShowResultWidget(bPlayerWon);
+}
+
+void AModengEnemySpawner::ShowLevelCompleteWidget()
+{
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	if (!ResultWidget && ResultWidgetClass)
+	{
+		ResultWidget = CreateWidget<UModengResultWidget>(PlayerController, ResultWidgetClass);
+	}
+
+	if (!ResultWidget)
+	{
+		return;
+	}
+
+	ResultWidget->SetLevelComplete(LevelTwoName);
+	if (!ResultWidget->IsInViewport())
+	{
+		ResultWidget->AddToViewport(100);
+	}
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(ResultWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PlayerController->SetInputMode(InputMode);
+	PlayerController->SetShowMouseCursor(true);
+	PlayerController->SetPause(true);
 }
 
 void AModengEnemySpawner::ShowResultWidget(bool bPlayerWon)

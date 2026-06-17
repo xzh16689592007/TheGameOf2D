@@ -4,11 +4,18 @@
 #include "ModengBossEnemy.h"
 
 #include "Animation/AnimSequenceBase.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "ModengEnemy.h"
+#include "ModengBossFireField.h"
+#include "ModengExplosionEffect.h"
 #include "ModengFastEnemy.h"
 #include "ModengLantern.h"
+#include "ModengMagicProjectile.h"
 #include "TimerManager.h"
 
 AModengBossEnemy::AModengBossEnemy()
@@ -36,27 +43,106 @@ AModengBossEnemy::AModengBossEnemy()
 	bShowHealthBarOnlyAfterDamage = false;
 	bUseSkeletalMeshVisuals = true;
 	bOverrideBodyMaterialColor = false;
+	BossProjectileClass = AModengMagicProjectile::StaticClass();
+	AreaSkillEffectClass = AModengExplosionEffect::StaticClass();
+	FireFieldClass = AModengBossFireField::StaticClass();
 	MinionTypes = {
 		AModengEnemy::StaticClass(),
 		AModengFastEnemy::StaticClass()
 	};
+	NormalHealthBarColor = HealthBarColor;
 
 	ApplyBossLoadout();
+}
+
+void AModengBossEnemy::ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacter* DamageInstigator)
+{
+	if (DamageAmount <= 0.0f || IsDead() || bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	const float FinalDamage = bShieldActive
+		? DamageAmount * (1.0f - FMath::Clamp(ShieldDamageReductionPercent, 0.0f, 0.95f))
+		: DamageAmount;
+
+	const float HalfHealthValue = MaxHealth * 0.5f;
+	if (!bHalfHealthPhaseTriggered && CurrentHealth >= HalfHealthValue && CurrentHealth - FinalDamage < HalfHealthValue)
+	{
+		if (DamageInstigator)
+		{
+			LastDamagingPlayer = DamageInstigator;
+		}
+		CurrentHealth = HalfHealthValue;
+		UpdateHealthBar();
+		StartHalfHealthPhase();
+		return;
+	}
+
+	Super::ApplyDamageToEnemy(FinalDamage, DamageInstigator);
+
+	if (IsDead() || ShieldHealthStepPercent <= 0.0f)
+	{
+		return;
+	}
+
+	const float HealthPercent = GetHealthPercent();
+	while (NextShieldTriggerHealthPercent > 0.0f && HealthPercent <= NextShieldTriggerHealthPercent)
+	{
+		ActivateDamageShield();
+		NextShieldTriggerHealthPercent -= ShieldHealthStepPercent;
+	}
 }
 
 void AModengBossEnemy::BeginPlay()
 {
 	Super::BeginPlay();
+	NormalHealthBarColor = HealthBarColor;
+	NextShieldTriggerHealthPercent = 1.0f - FMath::Clamp(ShieldHealthStepPercent, 0.05f, 0.95f);
 
 	if (SummonEverySeconds > 0.0f && MinionsPerSummon > 0)
 	{
 		GetWorld()->GetTimerManager().SetTimer(SummonTimer, this, &AModengBossEnemy::SummonMinions, SummonEverySeconds, true, SummonEverySeconds);
 	}
+
+	if (RangedSkillEverySeconds > 0.0f && RangedProjectileCount > 0)
+	{
+		GetWorld()->GetTimerManager().SetTimer(RangedSkillTimer, this, &AModengBossEnemy::CastRangedSkill, RangedSkillEverySeconds, true, RangedSkillEverySeconds * 0.55f);
+	}
+
+	if (AreaSkillEverySeconds > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(AreaSkillTimer, this, &AModengBossEnemy::CastAreaSkill, AreaSkillEverySeconds, true, AreaSkillEverySeconds * 0.8f);
+	}
+}
+
+void AModengBossEnemy::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	HalfHealthPhaseElapsed += DeltaSeconds;
+	ApplyFireFieldDamage(DeltaSeconds);
+}
+
+void AModengBossEnemy::MoveTowardTarget(float DeltaSeconds)
+{
+	if (bHalfHealthPhaseActive)
+	{
+		UpdateLocomotionAnimation(false);
+		return;
+	}
+
+	Super::MoveTowardTarget(DeltaSeconds);
 }
 
 void AModengBossEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!TargetLantern)
+	if (!TargetLantern || bHalfHealthPhaseActive)
 	{
 		return;
 	}
@@ -68,6 +154,7 @@ void AModengBossEnemy::AttackTarget(float DeltaSeconds)
 	}
 
 	TimeUntilNextAttack = AttackInterval;
+	FaceTargetLantern();
 	PlayAttackAnimation();
 
 	GetWorld()->GetTimerManager().ClearTimer(ScytheDamageTimer);
@@ -85,6 +172,15 @@ void AModengBossEnemy::Die()
 {
 	GetWorld()->GetTimerManager().ClearTimer(ScytheDamageTimer);
 	GetWorld()->GetTimerManager().ClearTimer(SummonTimer);
+	GetWorld()->GetTimerManager().ClearTimer(RangedSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AreaSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(ShieldTimer);
+	GetWorld()->GetTimerManager().ClearTimer(HalfHealthPhaseTimer);
+	if (ActiveFireField)
+	{
+		ActiveFireField->Destroy();
+		ActiveFireField = nullptr;
+	}
 	Super::Die();
 }
 
@@ -139,6 +235,7 @@ void AModengBossEnemy::ApplyScytheDamage()
 		return;
 	}
 
+	FaceTargetLantern();
 	const float DistanceToTargetX = FMath::Abs(TargetLantern->GetActorLocation().X - GetActorLocation().X);
 	if (DistanceToTargetX <= AttackRange + 35.0f)
 	{
@@ -148,7 +245,7 @@ void AModengBossEnemy::ApplyScytheDamage()
 
 void AModengBossEnemy::SummonMinions()
 {
-	if (IsDead() || MinionTypes.Num() == 0 || MinionsPerSummon <= 0)
+	if (IsDead() || bHalfHealthPhaseActive || MinionTypes.Num() == 0 || MinionsPerSummon <= 0)
 	{
 		return;
 	}
@@ -171,4 +268,315 @@ void AModengBossEnemy::SummonMinions()
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 		GetWorld()->SpawnActor<AModengEnemy>(MinionClass, SpawnLocation, GetActorRotation(), SpawnParams);
 	}
+}
+
+void AModengBossEnemy::CastRangedSkill()
+{
+	if (!BossProjectileClass || !TargetLantern || TargetLantern->IsExtinguished() || IsDead() || bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	FaceTargetLantern();
+	PlayAttackAnimation();
+
+	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	const float SafeDirectionX = FMath::IsNearlyZero(DirectionX) ? 1.0f : DirectionX;
+	const float CenterOffset = (static_cast<float>(RangedProjectileCount) - 1.0f) * 0.5f;
+
+	for (int32 ProjectileIndex = 0; ProjectileIndex < RangedProjectileCount; ++ProjectileIndex)
+	{
+		const float VerticalOffset = (static_cast<float>(ProjectileIndex) - CenterOffset) * RangedProjectileSpacing;
+		const FVector SpawnOffset = FVector(
+			RangedProjectileSpawnOffset.X * SafeDirectionX,
+			RangedProjectileSpawnOffset.Y,
+			RangedProjectileSpawnOffset.Z + VerticalOffset);
+		const FVector SpawnLocation = GetActorLocation() + SpawnOffset;
+		const FVector TargetLocation = TargetLantern->GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
+		const FRotator SpawnRotation = (TargetLocation - SpawnLocation).Rotation();
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = GetInstigator();
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		AModengMagicProjectile* Projectile = GetWorld()->SpawnActor<AModengMagicProjectile>(BossProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+		if (Projectile)
+		{
+			Projectile->InitializeProjectile(TargetLantern, RangedProjectileDamage, RangedProjectileSpeed, RangedProjectileImpactRadius);
+		}
+	}
+}
+
+void AModengBossEnemy::CastAreaSkill()
+{
+	if (!TargetLantern || TargetLantern->IsExtinguished() || IsDead() || bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	FaceTargetLantern();
+	PlayAttackAnimation();
+
+	FVector EffectLocation = GetActorLocation();
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		EffectLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+	EffectLocation.Z += AreaSkillEffectGroundOffset;
+
+	if (AreaSkillEffectClass)
+	{
+		const int32 SafeEffectCount = FMath::Max(1, AreaSkillEffectCount);
+		const float CenterOffset = (static_cast<float>(SafeEffectCount) - 1.0f) * 0.5f;
+		for (int32 EffectIndex = 0; EffectIndex < SafeEffectCount; ++EffectIndex)
+		{
+			FVector SpawnLocation = EffectLocation;
+			SpawnLocation.X += (static_cast<float>(EffectIndex) - CenterOffset) * AreaSkillEffectSpacing;
+
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.Owner = this;
+			SpawnParams.Instigator = GetInstigator();
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			GetWorld()->SpawnActor<AModengExplosionEffect>(AreaSkillEffectClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+		}
+	}
+
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		AModengLantern* Lantern = *It;
+		if (!Lantern || Lantern->IsExtinguished())
+		{
+			continue;
+		}
+
+		const float DistanceToLanternX = FMath::Abs(Lantern->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToLanternX <= AreaSkillRadius)
+		{
+			Lantern->ApplyDamageToLantern(AreaSkillDamage);
+		}
+	}
+}
+
+void AModengBossEnemy::ActivateDamageShield()
+{
+	if (ShieldDuration <= 0.0f || IsDead() || bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	bShieldActive = true;
+	HealthBarColor = ShieldHealthBarColor;
+	ShowHealthBar();
+	UpdateHealthBar();
+
+	if (bOverrideBodyMaterialColor)
+	{
+		SetEnemyBodyColor(FLinearColor(0.18f, 0.42f, 1.0f));
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(ShieldTimer);
+	GetWorld()->GetTimerManager().SetTimer(ShieldTimer, this, &AModengBossEnemy::DeactivateDamageShield, ShieldDuration, false);
+
+	if (bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor::Cyan, TEXT("Boss damage shield activated"));
+	}
+}
+
+void AModengBossEnemy::DeactivateDamageShield()
+{
+	bShieldActive = false;
+	HealthBarColor = NormalHealthBarColor;
+	EnsureHealthBarWidget();
+	UpdateHealthBar();
+
+	if (bOverrideBodyMaterialColor)
+	{
+		SetEnemyBodyColor(EnemyBodyColor);
+	}
+}
+
+void AModengBossEnemy::StartHalfHealthPhase()
+{
+	if (bHalfHealthPhaseTriggered || IsDead())
+	{
+		return;
+	}
+
+	bHalfHealthPhaseTriggered = true;
+	bHalfHealthPhaseActive = true;
+	HalfHealthPhaseElapsed = 0.0f;
+	CurrentHealth = FMath::Max(CurrentHealth, MaxHealth * 0.5f);
+	bShieldActive = false;
+	HealthBarColor = ShieldHealthBarColor;
+	ShowHealthBar();
+	UpdateHealthBar();
+
+	PauseBossTimers();
+	GetWorld()->GetTimerManager().ClearTimer(ResumeAnimationTimer);
+	bOneShotAnimationActive = false;
+	bWantsWalkAnimation = false;
+	CurrentLoopingAnimation = nullptr;
+	SavedMoveSpeed = MoveSpeed;
+	MoveSpeed = 0.0f;
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->MaxWalkSpeed = 0.0f;
+	}
+	UpdateLocomotionAnimation(false);
+
+	const FVector FireLocation = GetGroundEffectLocation();
+	if (FireFieldClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = GetInstigator();
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ActiveFireField = GetWorld()->SpawnActor<AModengBossFireField>(FireFieldClass, FireLocation, FRotator::ZeroRotator, SpawnParams);
+		if (ActiveFireField)
+		{
+			ActiveFireField->InitializeFireField(HalfHealthInvulnerableDuration, FireFieldStartRadius, FireFieldFinalRadius);
+		}
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(HalfHealthPhaseTimer);
+	GetWorld()->GetTimerManager().SetTimer(HalfHealthPhaseTimer, this, &AModengBossEnemy::EndHalfHealthPhase, HalfHealthInvulnerableDuration, false);
+
+	if (bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.4f, FColor::Orange, TEXT("Boss half-health fire field started"));
+	}
+}
+
+void AModengBossEnemy::EndHalfHealthPhase()
+{
+	if (!bHalfHealthPhaseActive || IsDead())
+	{
+		return;
+	}
+
+	ApplyFireFieldFinalExplosion();
+
+	if (ActiveFireField)
+	{
+		ActiveFireField->Destroy();
+		ActiveFireField = nullptr;
+	}
+
+	bHalfHealthPhaseActive = false;
+	HalfHealthPhaseElapsed = 0.0f;
+	MoveSpeed = SavedMoveSpeed > 0.0f ? SavedMoveSpeed : 95.0f;
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+	}
+
+	HealthBarColor = NormalHealthBarColor;
+	EnsureHealthBarWidget();
+	UpdateHealthBar();
+	ResumeBossTimers();
+	UpdateLocomotionAnimation(false);
+
+	if (bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.4f, FColor::Orange, TEXT("Boss half-health phase ended"));
+	}
+}
+
+void AModengBossEnemy::PauseBossTimers()
+{
+	GetWorld()->GetTimerManager().ClearTimer(ScytheDamageTimer);
+	GetWorld()->GetTimerManager().ClearTimer(SummonTimer);
+	GetWorld()->GetTimerManager().ClearTimer(RangedSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AreaSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(ShieldTimer);
+}
+
+void AModengBossEnemy::ResumeBossTimers()
+{
+	if (SummonEverySeconds > 0.0f && MinionsPerSummon > 0)
+	{
+		GetWorld()->GetTimerManager().SetTimer(SummonTimer, this, &AModengBossEnemy::SummonMinions, SummonEverySeconds, true, SummonEverySeconds);
+	}
+
+	if (RangedSkillEverySeconds > 0.0f && RangedProjectileCount > 0)
+	{
+		GetWorld()->GetTimerManager().SetTimer(RangedSkillTimer, this, &AModengBossEnemy::CastRangedSkill, RangedSkillEverySeconds, true, RangedSkillEverySeconds * 0.55f);
+	}
+
+	if (AreaSkillEverySeconds > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(AreaSkillTimer, this, &AModengBossEnemy::CastAreaSkill, AreaSkillEverySeconds, true, AreaSkillEverySeconds * 0.8f);
+	}
+}
+
+void AModengBossEnemy::ApplyFireFieldDamage(float DeltaSeconds)
+{
+	if (FireFieldDamagePerSecond <= 0.0f || HalfHealthInvulnerableDuration <= 0.0f)
+	{
+		return;
+	}
+
+	const float Alpha = FMath::Clamp(HalfHealthPhaseElapsed / HalfHealthInvulnerableDuration, 0.0f, 1.0f);
+	const float CurrentRadius = FMath::Lerp(FireFieldStartRadius, FireFieldFinalRadius, Alpha);
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		AModengLantern* Lantern = *It;
+		if (!Lantern || Lantern->IsExtinguished())
+		{
+			continue;
+		}
+
+		const float DistanceToLanternX = FMath::Abs(Lantern->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToLanternX <= CurrentRadius)
+		{
+			Lantern->ApplyDamageToLantern(FireFieldDamagePerSecond * DeltaSeconds);
+		}
+	}
+}
+
+void AModengBossEnemy::ApplyFireFieldFinalExplosion()
+{
+	const FVector ExplosionLocation = GetGroundEffectLocation();
+	if (AreaSkillEffectClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = GetInstigator();
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AModengExplosionEffect* Explosion = GetWorld()->SpawnActor<AModengExplosionEffect>(AreaSkillEffectClass, ExplosionLocation, FRotator::ZeroRotator, SpawnParams);
+		if (Explosion)
+		{
+			const float ExplosionVisualScale = FMath::Max(1.0f, FireFieldFinalRadius / 230.0f);
+			Explosion->SetActorScale3D(FVector(ExplosionVisualScale, ExplosionVisualScale, 1.0f));
+		}
+	}
+
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		AModengLantern* Lantern = *It;
+		if (!Lantern || Lantern->IsExtinguished())
+		{
+			continue;
+		}
+
+		const float DistanceToLanternX = FMath::Abs(Lantern->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToLanternX <= FireFieldFinalRadius)
+		{
+			Lantern->ApplyDamageToLantern(FireFieldFinalExplosionDamage);
+		}
+	}
+}
+
+FVector AModengBossEnemy::GetGroundEffectLocation() const
+{
+	FVector EffectLocation = GetActorLocation();
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		EffectLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+	EffectLocation.Z += FireFieldGroundOffset;
+	return EffectLocation;
 }

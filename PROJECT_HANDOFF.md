@@ -2,8 +2,9 @@
 
 ## Project Basics
 
-- Project path: `D:\UE_project\TheGameOf2D`
-- Unreal project file: `D:\UE_project\TheGameOf2D\TheGameOf2D.uproject`
+- Original project path used in earlier handoffs: `D:\UE_project\TheGameOf2D`
+- Current local path used for this handoff: `C:\Users\26474\Documents\Unreal Projects\TheGameOf2D`
+- Unreal project file: `TheGameOf2D.uproject`
 - Engine: Unreal Engine 5.7
 - GitHub repo: `https://github.com/xzh16689592007/TheGameOf2D`
 - Branch: `main`
@@ -30,6 +31,7 @@
 ## Important Existing Content
 
 - Main custom level: `Content/MoDeng/Maps/L_Level01_Street.umap`
+- Current second level: `Content/MoDeng/Maps/L_Level02_BridgeMarket.umap`
 - Main custom assets folder: `Content/MoDeng`
 - Imported player character folder: `Content/SamuraiGirlTomoe`
   - Source library path: `D:\UE素材库\2025角色集合更新\A人物\文件\aa109-Samurai-Girl-Tomoe\SamuraiGirlTomoe`
@@ -151,6 +153,8 @@
   - Taking non-lethal damage plays a hit animation and still updates the health bar.
   - Dying plays the death animation sequence, disables collision immediately, then destroys after the animation/delay.
   - `EnemyBody` remains as a static mesh fallback and is hidden when skeletal visuals are enabled.
+  - C++ now has a separate `EnemyWeaponMesh` skeletal component for held weapons, attached to `Weapon_R_Socket` or `hand_r`.
+  - `FaceTargetLantern()` centralizes enemy facing so melee, ranged, and Boss attacks point toward the current lantern target before attacking.
   - `BP_ModengEnemy` previously used `SM_Stickman` on `EnemyBody`; C++ now prefers the modular skeleton setup at runtime.
   - C++ supports optional material color override and hit flash for placeholder visuals. For imported art, keep `bOverrideBodyMaterialColor` false so the model keeps its own material.
 
@@ -161,7 +165,8 @@
   - Inherits `AModengEnemy`.
   - Faster, lower health, faster attack interval.
   - Uses modular skeleton visuals through `ApplyEnemyLoadout()`.
-  - Current loadout uses lighter/unarmed body parts and unarmed idle/run/attack/hit/death animations.
+  - Current loadout was swapped to the heavier/brute modular skeleton look and now carries an axe.
+  - Uses weapon idle/run/attack/hit/death animations so its attack reads as a weapon strike instead of a bare-hand hit.
 
 - `AModengExploderEnemy`
   - Files:
@@ -171,7 +176,8 @@
   - Overrides attack behavior.
   - Bursts near lantern, deals larger damage, then dies.
   - Uses modular skeleton visuals through `ApplyEnemyLoadout()`.
-  - Current loadout uses heavier/brute body parts and weapon-style attack/death animations.
+  - Current loadout was swapped to the lighter/fast unarmed modular skeleton look.
+  - Spawns the native `AModengExplosionEffect` when it self-destructs.
 
 - `AModengRangedEnemy`
   - Files:
@@ -188,6 +194,35 @@
   - Projectile actor used by `AModengRangedEnemy`.
   - Travels toward the target lantern and applies impact damage/radius behavior on hit.
 
+- `AModengBossEnemy`
+  - Files:
+    - `Source/TheGameOf2D/ModengBossEnemy.h`
+    - `Source/TheGameOf2D/ModengBossEnemy.cpp`
+  - Inherits `AModengEnemy`.
+  - Uses the Reaper mesh and Reaper idle/float/attack/death animations from `Content/Reaper`.
+  - Basic attack is a scythe melee hit, not the wizard projectile behavior.
+  - Has timed ranged projectile volleys, area explosions, and minion summoning in addition to melee.
+  - Has health-threshold damage reduction shields represented by the health-bar color only; do not re-add the old shield bubble visual unless the team explicitly wants it.
+  - First time health drops below 50%, Boss restores/locks to 50%, becomes invulnerable, stops moving/attacking, spawns an expanding fire field, then ends with a final explosion. After this phase, normal Boss logic resumes.
+  - Fire-field and explosion damage currently use the existing lantern-damage target model. If the project later adds player health, this range logic should be extended to damage the player too.
+
+- `AModengBossFireField`
+  - Files:
+    - `Source/TheGameOf2D/ModengBossFireField.h`
+    - `Source/TheGameOf2D/ModengBossFireField.cpp`
+  - Native C++ fire-field actor used by the Boss half-health phase.
+  - Expands from `FireFieldStartRadius` to `FireFieldFinalRadius`.
+  - Uses ground lava/scorch layers, multiple flame tongue meshes, embers, smoke puffs, and a flickering point light.
+  - This is still a code-built prototype VFX, not Niagara. A real Niagara fire pack would be the best later polish upgrade.
+
+- `AModengExplosionEffect`
+  - Files:
+    - `Source/TheGameOf2D/ModengExplosionEffect.h`
+    - `Source/TheGameOf2D/ModengExplosionEffect.cpp`
+  - Native reusable explosion actor.
+  - Builds shockwave, core flash, fireball, smoke, scorch, ember meshes, and a short-lived point light from engine primitives/materials.
+  - Used by exploder enemies, Boss area skills, and the Boss half-health final explosion.
+
 - `AModengEnemySpawner`
   - Files:
     - `Source/TheGameOf2D/ModengEnemySpawner.h`
@@ -197,6 +232,9 @@
   - Recent teammate update adds `AModengRangedEnemy` to the default enemy type list if it is not already present.
   - Checks victory/defeat.
   - Shows C++ result UI on victory/defeat.
+  - On Level 1 victory, shows a level-complete menu instead of immediately loading Level 2.
+  - Level-complete menu allows restarting Level 1, entering Level 2, or quitting.
+  - Supports spawning a Boss on the final wave / configured Boss encounter.
   - Exposes `OnGameEnded`, `OnVictory`, and `OnDefeat` delegates for Blueprint/UI/VFX hooks.
   - Restores gameplay input on BeginPlay as a safety net after restarting from the result screen.
 
@@ -205,8 +243,8 @@
     - `Source/TheGameOf2D/ModengResultWidget.h`
     - `Source/TheGameOf2D/ModengResultWidget.cpp`
   - Native C++ UMG result widget.
-  - Shows Victory/Defeat text.
-  - Provides Restart and Quit buttons.
+  - Shows Victory/Defeat text, or Level Complete text when Level 1 is cleared.
+  - Provides Restart, optional Next Level, and Quit buttons.
   - Restart restores `GameOnly` input mode, hides mouse cursor, unpauses, removes the widget, then reloads the current level.
 
 - `AModengHUD`
@@ -401,6 +439,12 @@ Use this full build command when UE is closed:
 & "D:\UE_5.7\Engine\Build\BatchFiles\Build.bat" TheGameOf2DEditor Win64 Development -Project="D:\UE_project\TheGameOf2D\TheGameOf2D.uproject" -WaitMutex
 ```
 
+Current local machine command used for this handoff:
+
+```powershell
+& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" TheGameOf2DEditor Win64 Development -Project="C:\Users\26474\Documents\Unreal Projects\TheGameOf2D\TheGameOf2D.uproject" -WaitMutex
+```
+
 If UE is open and Live Coding is active, full build will fail with:
 
 ```text
@@ -485,26 +529,29 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone before the current pending commit: commit `d2c824f` is pulled from `origin/main`. Tomoe jump/fall locomotion and the montage-driven ground combo are already on GitHub.
+Latest synced milestone before the current pending commit: commit `f42d5d1` is pulled from `origin/main`. Tomoe jump/fall locomotion, montage-driven ground combo, and ground combo cancel/loop notifies are already on GitHub.
 
 Current pending update in this handoff:
 
-- `ABP_Tomoe_SideScroller` was updated with an `UpperBodyCombatSlot` layered over the cached full-body combat pose. The base locomotion pose continues to drive the legs while sheath/restore can play on the upper body.
-- `BP_SideScrollingCharacter` was updated to use the upper-body sheath flow. `CombatTransitionSlotName` should point to `UpperBodyCombatSlot`.
-- `SKEL_Tomoe_Skeleton` was updated with the new slot configuration needed by the upper-body combat slot.
-- C++ sheath/restore flow now uses dynamic montage playback when possible, controlled by `CombatTransitionSlotName`, `CombatTransitionBlendInTime`, `CombatTransitionBlendOutTime`, and `CombatTransitionAnimationPlayRate`.
-- C++ allows movement during sheathing when `bAllowMovementDuringSheathing` is enabled or when the transition slot is `UpperBodyCombatSlot`.
-- Pressing attack during sheathing now interrupts the sheath montage and immediately starts a new ground attack, or air-to-floor attack if the character is falling.
-- Air-to-floor end now safely restores `PlayerAnimClass` before sheath/restore slot playback if the mesh was still in single-node animation mode, preventing the landing attack end animation from replaying instead of sheathing.
-- Added two native montage notifies:
-  - `Open Move Cancel Window`: movement input after this point cancels the active ground attack into sheath/restore and then continues into locomotion.
-  - `Loop Ground Combo`: usually placed on `AM_Tomoe_GroundAttack_4`; if attack input is queued, it restarts the combo at step 1 for another four-hit sequence.
-- The four ground attack montages were updated in UE with the new cancel/loop tuning points.
+- Boss C++ was expanded into a fuller second-level encounter:
+  - Reaper mesh/animation loadout remains the Boss visual.
+  - Scythe melee is the base attack.
+  - Timed ranged projectile volley, area explosion, and minion summon skills are active.
+  - Health-threshold damage reduction shield remains represented by health-bar color only.
+  - First drop below half health triggers a one-time invulnerable fire-field phase: health returns to 50%, Boss cannot move/attack, fire expands from the feet with continuous damage, then a final explosion fires and normal Boss logic resumes.
+- Added `AModengBossFireField` as the expanding Boss fire-field visual/damage helper.
+- Added `AModengExplosionEffect` as a reusable native explosion VFX actor for exploder enemies and Boss skills.
+- Fast and exploder enemy visuals were swapped:
+  - Fast enemy now uses the heavier/brute skeleton look and carries an axe.
+  - Exploder enemy now uses the lighter/unarmed skeleton look.
+  - Exploder self-destruct now spawns the native explosion effect.
+- Enemy facing was cleaned up so melee, ranged, and Boss attacks face the lantern target before attacking. This fixes reversed attack orientation after right-side spawns.
+- First-level victory now opens a C++ level-complete result menu with Restart, Next Level, and Quit instead of immediately traveling.
+- Side-scrolling camera now snaps to a newly possessed pawn and has wider left bounds so shifted Level 2 spawn points do not start with the player off-screen.
+- Level 2 Bridge Market external actor assets were modified/added in UE. Treat the changed `Content/__ExternalActors__/MoDeng/Maps/L_Level02_BridgeMarket` files as part of the current Level 2 state.
 - A full build after these C++ changes succeeded on 2026-06-17 with:
   - `Result: Succeeded`
-- Turn animation support was considered and then abandoned for now; do not treat the uncommitted `Content/MoDeng/Animations/Tomoe/Turn` folder as part of the active setup unless the team intentionally revisits turn-in-place.
-- `Content/MoDeng/Animations/RTG_CombatKatana_To_Tomoe.uasset` may appear deleted locally from editor/asset cleanup while experimenting. It is not part of this pending update and should not be committed as a deletion unless the team intentionally removes that retargeter.
-- `Config/DefaultEditor.ini` may still be locally modified from editor preview/profile noise and should not be committed unless intentional.
+- `outputs/`, `tools/`, and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in this gameplay commit.
 
 ## Git Setup And Notes
 
@@ -535,6 +582,9 @@ git lfs pull
 - Later-wave enemy health bars previously disappeared. This was fixed by revalidating/initializing the native health widget before health-bar update/show. User reported it works.
 - Fast and exploder enemies have distinct modular skeleton loadouts, but their exact scale/readability may still need gameplay tuning.
 - Ranged enemy exists and uses `AModengMagicProjectile`; tune projectile speed, impact radius, spawn offset, and wave pacing after playtesting.
+- Boss second-level encounter now exists in C++, but still needs PIE tuning for damage numbers, skill cadence, fire-field radius, and readability.
+- Boss fire-field visual is code-built from primitive meshes/materials. It is improved over the first prototype, but Niagara/fire texture VFX would be a better production-quality solution.
+- Current enemy/Boss damage target model still centers on lantern durability. If the design fully pivots to a player-health action platformer, add a player damage/health interface and route fire-field, explosion, melee, and projectile damage through it.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Player is now visually migrated from default Manny/Quinn appearance to Samurai Girl Tomoe for the current prototype.
 - Player attack now uses the new four-montage ground combo path, but it still needs in-editor feel tuning:
@@ -555,18 +605,39 @@ git lfs pull
 
 ## Suggested Next Steps
 
-1. Validate sheath movement and interrupt behavior:
+1. Playtest the second-level Boss encounter:
+   - Confirm the Reaper Boss uses scythe melee, ranged volley, area explosion, summon, and half-health fire-field phase.
+   - Tune `HalfHealthInvulnerableDuration`, `FireFieldStartRadius`, `FireFieldFinalRadius`, `FireFieldDamagePerSecond`, and `FireFieldFinalExplosionDamage`.
+   - Confirm the half-health phase only triggers once and the Boss resumes normal behavior afterward.
+   - Confirm the blue health bar still communicates damage reduction without any shield bubble visual.
+
+2. Validate Level 1 clear flow:
+   - Clear Level 1 and confirm the menu offers Restart, Next Level, and Quit.
+   - Confirm Next Level opens `L_Level02_BridgeMarket`.
+   - Confirm Restart reloads the current level with gameplay input restored.
+
+3. Validate Level 2 spawn/camera:
+   - Start Level 2 after the shifted player spawn point.
+   - Confirm the camera initially centers on the possessed character and does not leave the player off-screen on the far left.
+   - If the level grows further left than `-3000`, tune `CameraXMinBounds` on `ASideScrollingCameraManager`.
+
+4. Recheck fast/exploder readability:
+   - Fast enemy should read as the axe-carrying brute.
+   - Exploder enemy should read as the lighter unarmed unit and should spawn the explosion effect when it detonates.
+   - If the names feel counterintuitive after the model swap, tune scale/color/animation speed so gameplay roles stay obvious.
+
+5. Validate sheath movement and interrupt behavior:
    - Confirm `ABP_Tomoe_SideScroller` routes the cached full-body combat pose through `UpperBodyCombatSlot` into a layered blend per bone.
    - Confirm `BP_SideScrollingCharacter.CombatTransitionSlotName = UpperBodyCombatSlot`.
    - Attack once, then hold movement during sheath: the legs should keep running instead of sliding or standing still.
    - Attack again during sheath: sheath should stop and a new attack should begin immediately.
    - Test air-to-floor attack landing: it should play the landing impact/end, then sheath, without replaying the landing attack end in place.
 
-2. Clean up combat debug visuals for normal playtests:
+6. Clean up combat debug visuals for normal playtests:
    - Disable `bDrawWeaponTraceDebug` unless actively debugging blade contact.
    - Cyan/red/silver weapon traces are useful for tuning, but they dominate gameplay footage.
 
-3. Tune the four-montage ground combo cancel and loop windows:
+7. Tune the four-montage ground combo cancel and loop windows:
    - Open `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.uasset` through `AM_Tomoe_GroundAttack_4.uasset`.
    - Confirm all four use `DefaultGroup.GroundAttackSlot`.
    - Confirm `ABP_Tomoe_SideScroller` root motion mode is `Root Motion from Montages Only`.
@@ -577,30 +648,30 @@ git lfs pull
    - If input feels too strict, tune notify positions first, not C++.
    - Use `Combo_Attack_02_All_Seq` as the reference for natural body-pose connection points.
 
-4. Polish draw/sheath flow:
+8. Polish draw/sheath flow:
    - Confirm `CombatToIdleAnimation` on `BP_SideScrollingCharacter` points to `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`.
    - Keep the initial sword state as sheathed: hand sword hidden, sheathed sword visible.
    - Add or tune weapon visibility notifies later if the hand/sheathed sword swap needs exact frame timing.
 
-5. Add attack hit feedback:
+9. Add attack hit feedback:
    - Add short hit stop on successful player melee hit.
    - Add enemy hit flash/material flash.
    - Add sword whoosh and hit SFX.
    - Add simple hit VFX / slash trail from an existing project asset or a newly imported VFX pack; the previous `SwordAnimsetPro` project-local test content was removed.
 
-6. Tune ground attack hit windows:
+10. Tune ground attack hit windows:
    - `BeginGroundAttackTrace` should be near visible blade contact.
    - `EndGroundAttackTrace` should be after the blade leaves the hit area.
    - Set `ComboStepIndex` on each begin notify: 1, 2, 3, 4.
    - Enable `bDrawWeaponTraceDebug` temporarily if a visible blade pass misses.
 
-7. Polish Tomoe jump/fall locomotion:
+11. Polish Tomoe jump/fall locomotion:
    - Current `JumpStart` / `FallLoop` split is working.
    - Add a dedicated `Land` state only if it does not make movement feel sticky.
    - Tune transition blend duration between `JumpStart` and `FallLoop` if the pose pops.
    - Keep using Tomoe-compatible or Tomoe-retargeted jump/fall animations; do not use enemy skeleton animations directly.
 
-8. Continue polishing Tomoe player setup:
+12. Continue polishing Tomoe player setup:
    - Open `BP_SideScrollingCharacter`.
    - Confirm `CharacterMesh0` and class default `PlayerSkeletalMesh` both point to `SK_SAMURAIGIRL_01`.
    - Confirm class default `PlayerAnimClass` points to `ABP_Tomoe_SideScroller`.
@@ -609,7 +680,7 @@ git lfs pull
    - If ground attacks move too far or snap, check the root motion settings on the four `Combo_Attack_02_0*_Seq` assets and the AnimBP root motion mode.
    - For reflected C++ changes, close UE and full-build instead of using Live Coding.
 
-7. Tune the visible katana/weapon:
+13. Tune the visible katana/weapon:
    - Verify `Socket_Katana_R` is on Tomoe's real `hand_r` bone, not `ik_hand_r`.
    - Verify the `Katana` component in `BP_SideScrollingCharacter` uses `SM_Katana`, parent socket `Socket_Katana_R`, and `NoCollision`.
    - Verify `KatanaTraceStart` and `KatanaTraceEnd` remain children of `Katana`.
@@ -617,12 +688,12 @@ git lfs pull
    - Tune socket transform in `SKEL_Tomoe_Skeleton` until the grip sits naturally in the right hand.
    - Keep C++ hit detection separate from weapon mesh collision for now.
 
-9. Later: give fast and exploder enemies distinct polished visuals:
+14. Later: give fast and exploder enemies distinct polished visuals:
    - Fast enemy can be smaller/lighter/faster-looking.
    - Exploder enemy can be larger/redder/more volatile-looking.
    - They currently remain acceptable placeholders because their shapes distinguish enemy types.
 
-10. Later: upgrade enemy movement beyond X-axis:
+15. Later: upgrade enemy movement beyond X-axis:
    - Route point system for platform levels.
    - Flying enemy.
    - Ranged enemy.

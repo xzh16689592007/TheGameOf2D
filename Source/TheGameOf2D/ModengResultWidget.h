@@ -19,6 +19,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Result")
 	void SetResult(bool bInPlayerWon);
 
+	UFUNCTION(BlueprintCallable, Category = "Result")
+	void SetLevelComplete(FName InNextLevelName);
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -34,9 +37,14 @@ private:
 	TObjectPtr<UButton> RestartButton;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UButton> NextLevelButton;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> QuitButton;
 
 	bool bPlayerWon = false;
+	bool bLevelComplete = false;
+	FName NextLevelName;
 
 	void BuildWidgetTreeIfNeeded();
 	void RefreshResultText();
@@ -45,6 +53,9 @@ private:
 
 	UFUNCTION()
 	void HandleRestartClicked();
+
+	UFUNCTION()
+	void HandleNextLevelClicked();
 
 	UFUNCTION()
 	void HandleQuitClicked();

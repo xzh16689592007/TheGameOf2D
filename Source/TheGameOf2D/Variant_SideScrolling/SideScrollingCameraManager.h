@@ -31,7 +31,7 @@ public:
 
 	/** Minimum camera scrolling bounds in world space */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera", meta=(ClampMin=-100000, ClampMax=100000, Units="cm"))
-	float CameraXMinBounds = -400.0f;
+	float CameraXMinBounds = -3000.0f;
 
 	/** Maximum camera scrolling bounds in world space */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera", meta=(ClampMin=-100000, ClampMax=100000, Units="cm"))
@@ -41,6 +41,9 @@ protected:
 
 	/** Last cached camera vertical location. The camera only adjusts its height if necessary. */
 	float CurrentZ = 0.0f;
+
+	/** Last actor used as the camera target. Target changes should snap instead of lerping from stale views. */
+	TWeakObjectPtr<AActor> LastViewTarget;
 
 	/** First-time update camera setup flag */
 	bool bSetup = true;

@@ -33,6 +33,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy")
 	UStaticMeshComponent* EnemyBody;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	USkeletalMeshComponent* EnemyWeaponMesh;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Enemy|Health")
 	UWidgetComponent* HealthBarComponent;
 
@@ -82,6 +85,9 @@ protected:
 	TArray<TObjectPtr<USkeletalMesh>> EnemySkeletalMeshParts;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	TObjectPtr<USkeletalMesh> EnemyWeaponSkeletalMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	TSubclassOf<UAnimInstance> EnemyAnimClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
@@ -92,6 +98,21 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	FVector EnemyMeshScale = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FName EnemyWeaponAttachSocketName = TEXT("Weapon_R_Socket");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FName EnemyWeaponAttachFallbackBoneName = TEXT("hand_r");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FVector EnemyWeaponRelativeLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FRotator EnemyWeaponRelativeRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
+	FVector EnemyWeaponScale = FVector::OneVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	FLinearColor EnemyBodyColor = FLinearColor(0.25f, 0.12f, 0.36f);
@@ -178,8 +199,10 @@ protected:
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
 	virtual void ApplyEnemyLoadout();
+	void FaceTargetLantern();
 	void ConfigureEnemyVisuals();
 	void ConfigureEnemyMeshParts(bool bHasSkeletalVisual);
+	void ConfigureEnemyWeapon(bool bHasSkeletalVisual);
 	void SetEnemyBodyColor(const FLinearColor& Color);
 	void FlashHit();
 	void RestoreBodyColor();
@@ -199,7 +222,7 @@ protected:
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")
-	void ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacter* DamageInstigator = nullptr);
+	virtual void ApplyDamageToEnemy(float DamageAmount, ASideScrollingCharacter* DamageInstigator = nullptr);
 
 	UFUNCTION(BlueprintPure, Category = "Enemy")
 	float GetHealthPercent() const;

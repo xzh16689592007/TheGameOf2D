@@ -28,14 +28,19 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 		// calculate the "zoom distance" - in reality the distance we want to keep to the target
 		float CurrentY = CurrentZoom + CurrentActorLocation.Y;
 
+		const bool bTargetChanged = LastViewTarget.Get() != OutVT.Target;
+		LastViewTarget = OutVT.Target;
+
+		const float EffectiveCameraXMinBounds = FMath::Min(CameraXMinBounds, -3000.0f);
+
 		// do first-time setup
-		if (bSetup)
+		if (bSetup || bTargetChanged)
 		{
 			// lower the setup flag
 			bSetup = false;
 
 			// initialize the camera viewpoint and return
-			OutVT.POV.Location.X = CurrentActorLocation.X;
+			OutVT.POV.Location.X = FMath::Clamp(CurrentActorLocation.X, EffectiveCameraXMinBounds, CameraXMaxBounds);
 			OutVT.POV.Location.Y = CurrentY;
 			OutVT.POV.Location.Z = CurrentActorLocation.Z + CameraZOffset;
 
@@ -95,7 +100,7 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 		}
 
 		// clamp the X axis to the min and max camera bounds
-		float CurrentX = FMath::Clamp(CurrentActorLocation.X, CameraXMinBounds, CameraXMaxBounds);
+		float CurrentX = FMath::Clamp(CurrentActorLocation.X, EffectiveCameraXMinBounds, CameraXMaxBounds);
 
 		// blend towards the new camera location and update the output
 		FVector TargetCameraLocation(CurrentX, CurrentY, CurrentZ);

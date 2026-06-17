@@ -146,10 +146,10 @@ protected:
 	bool IsCurrentLevel(FName LevelName) const;
 	bool DoesConfiguredSecondLevelExist() const;
 	bool ShouldSpawnBossThisWave() const;
-	bool ShouldLoadSecondLevelOnVictory() const;
+	bool ShouldShowLevelCompleteMenuOnVictory() const;
 	void ApplyCurrentLevelDefaults();
-	void OpenConfiguredSecondLevel();
 	void CheckWaveProgress();
 	void EndGame(bool bPlayerWon);
 	void ShowResultWidget(bool bPlayerWon);
+	void ShowLevelCompleteWidget();
 };

@@ -4,8 +4,11 @@
 #include "ModengExploderEnemy.h"
 
 #include "Animation/AnimSequenceBase.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/World.h"
+#include "ModengExplosionEffect.h"
 #include "ModengLantern.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -17,17 +20,16 @@ AModengExploderEnemy::AModengExploderEnemy()
 	AttackDamage = 35.0f;
 	AttackRange = 95.0f;
 	InkReward = 2;
-	EnemyBodyScale = FVector(1.05f, 1.05f, 1.05f);
-	EnemyBodyColor = FLinearColor(0.72f, 0.08f, 0.05f);
-	HitFlashColor = FLinearColor(1.0f, 0.72f, 0.22f);
+	EnemyBodyScale = FVector(0.55f, 0.55f, 1.15f);
+	EnemyBodyColor = FLinearColor(0.08f, 0.16f, 0.36f);
 	EnemyMeshRelativeLocation = FVector(0.0f, 0.0f, -75.0f);
 	EnemyMeshRelativeRotation = FRotator(0.0f, -90.0f, 0.0f);
-	EnemyMeshScale = FVector(1.12f, 1.12f, 1.12f);
-	HealthBarRelativeLocation = FVector(0.0f, 0.0f, 125.0f);
-	AttackAnimationPlayRate = 1.35f;
+	EnemyMeshScale = FVector(0.82f, 0.82f, 0.82f);
+	HealthBarRelativeLocation = FVector(0.0f, 0.0f, 95.0f);
 	DeathAnimationPlayRate = 1.0f;
 	bOverrideBodyMaterialColor = false;
 	bUseSkeletalMeshVisuals = true;
+	ExplosionEffectClass = AModengExplosionEffect::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SkeletonBruteMesh(TEXT("/Game/ModularCharacterSkeleton/Meshes/SK_Skeleton.SK_Skeleton"));
 	if (SkeletonBruteMesh.Succeeded())
@@ -37,16 +39,16 @@ AModengExploderEnemy::AModengExploderEnemy()
 	}
 
 	EnemySkeletalMeshParts.Empty();
-	const TCHAR* BruteParts[] = {
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ChestBelt.SK_ChestBelt"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BootsFur.SK_BootsFur"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ArmBracersFur.SK_ArmBracersFur"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helmet.SK_Helmet"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_L_02.SK_ShoulderPad_L_02"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_R_02.SK_ShoulderPad_R_02"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Cape.SK_Cape")
+	EnemyWeaponSkeletalMesh = nullptr;
+	const TCHAR* FastParts[] = {
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ChestCloth.SK_ChestCloth"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BootsPads.SK_BootsPads"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ArmBracersPads.SK_ArmBracersPads"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_HandsBandage.SK_HandsBandage"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_LegsBandage.SK_LegsBandage"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BeltFur.SK_BeltFur")
 	};
-	for (const TCHAR* PartPath : BruteParts)
+	for (const TCHAR* PartPath : FastParts)
 	{
 		ConstructorHelpers::FObjectFinder<USkeletalMesh> MeshPart(PartPath);
 		if (MeshPart.Succeeded())
@@ -55,34 +57,34 @@ AModengExploderEnemy::AModengExploderEnemy()
 		}
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> BruteIdleAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_idle.Skeleton_Anim_idle"));
-	if (BruteIdleAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> FastIdleAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Idle_Unarmed.Skeleton_Anim_Idle_Unarmed"));
+	if (FastIdleAnimation.Succeeded())
 	{
-		IdleAnimation = BruteIdleAnimation.Object;
+		IdleAnimation = FastIdleAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> BruteWalkAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_walk.Skeleton_Anim_walk"));
-	if (BruteWalkAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> FastWalkAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Run_Unarmed.Skeleton_Anim_Run_Unarmed"));
+	if (FastWalkAnimation.Succeeded())
 	{
-		WalkAnimation = BruteWalkAnimation.Object;
+		WalkAnimation = FastWalkAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> BruteAttackAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_1H_Right_WeaponR.Skeleton_Anim_Attack_1H_Right_WeaponR"));
-	if (BruteAttackAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> FastAttackAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_Unarmed.Skeleton_Anim_Attack_Unarmed"));
+	if (FastAttackAnimation.Succeeded())
 	{
-		AttackAnimation = BruteAttackAnimation.Object;
+		AttackAnimation = FastAttackAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> BruteHitAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_hit.Skeleton_Anim_hit"));
-	if (BruteHitAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> FastHitAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Hit_Unarmed.Skeleton_Anim_Hit_Unarmed"));
+	if (FastHitAnimation.Succeeded())
 	{
-		HitAnimation = BruteHitAnimation.Object;
+		HitAnimation = FastHitAnimation.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> BruteDeathAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_WeaponR.Skeleton_Anim_Death_WeaponR"));
-	if (BruteDeathAnimation.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> FastDeathAnimation(TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_Unarmed.Skeleton_Anim_Death_Unarmed"));
+	if (FastDeathAnimation.Succeeded())
 	{
-		DeathAnimation = BruteDeathAnimation.Object;
+		DeathAnimation = FastDeathAnimation.Object;
 	}
 }
 
@@ -91,6 +93,19 @@ void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 	if (!TargetLantern)
 	{
 		return;
+	}
+
+	if (ExplosionEffectClass)
+	{
+		FVector ExplosionLocation = GetActorLocation();
+		if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+		{
+			ExplosionLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+		}
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		GetWorld()->SpawnActor<AModengExplosionEffect>(ExplosionEffectClass, ExplosionLocation, FRotator::ZeroRotator, SpawnParams);
 	}
 
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
@@ -119,16 +134,16 @@ void AModengExploderEnemy::ApplyEnemyLoadout()
 	}
 
 	EnemySkeletalMeshParts.Empty();
-	const TCHAR* BruteParts[] = {
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ChestBelt.SK_ChestBelt"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BootsFur.SK_BootsFur"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ArmBracersFur.SK_ArmBracersFur"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Helmet.SK_Helmet"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_L_02.SK_ShoulderPad_L_02"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ShoulderPad_R_02.SK_ShoulderPad_R_02"),
-		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_Cape.SK_Cape")
+	EnemyWeaponSkeletalMesh = nullptr;
+	const TCHAR* FastParts[] = {
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ChestCloth.SK_ChestCloth"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BootsPads.SK_BootsPads"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_ArmBracersPads.SK_ArmBracersPads"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_HandsBandage.SK_HandsBandage"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_LegsBandage.SK_LegsBandage"),
+		TEXT("/Game/ModularCharacterSkeleton/Meshes/ModularBodyParts/SK_BeltFur.SK_BeltFur")
 	};
-	for (const TCHAR* PartPath : BruteParts)
+	for (const TCHAR* PartPath : FastParts)
 	{
 		if (USkeletalMesh* MeshPart = LoadObject<USkeletalMesh>(nullptr, PartPath))
 		{
@@ -136,28 +151,28 @@ void AModengExploderEnemy::ApplyEnemyLoadout()
 		}
 	}
 
-	if (UAnimSequenceBase* BruteIdleAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_idle.Skeleton_Anim_idle")))
+	if (UAnimSequenceBase* FastIdleAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Idle_Unarmed.Skeleton_Anim_Idle_Unarmed")))
 	{
-		IdleAnimation = BruteIdleAnimation;
+		IdleAnimation = FastIdleAnimation;
 	}
 
-	if (UAnimSequenceBase* BruteWalkAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_walk.Skeleton_Anim_walk")))
+	if (UAnimSequenceBase* FastWalkAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Run_Unarmed.Skeleton_Anim_Run_Unarmed")))
 	{
-		WalkAnimation = BruteWalkAnimation;
+		WalkAnimation = FastWalkAnimation;
 	}
 
-	if (UAnimSequenceBase* BruteAttackAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_1H_Right_WeaponR.Skeleton_Anim_Attack_1H_Right_WeaponR")))
+	if (UAnimSequenceBase* FastAttackAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Attack_Unarmed.Skeleton_Anim_Attack_Unarmed")))
 	{
-		AttackAnimation = BruteAttackAnimation;
+		AttackAnimation = FastAttackAnimation;
 	}
 
-	if (UAnimSequenceBase* BruteHitAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_hit.Skeleton_Anim_hit")))
+	if (UAnimSequenceBase* FastHitAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Hit_Unarmed.Skeleton_Anim_Hit_Unarmed")))
 	{
-		HitAnimation = BruteHitAnimation;
+		HitAnimation = FastHitAnimation;
 	}
 
-	if (UAnimSequenceBase* BruteDeathAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_WeaponR.Skeleton_Anim_Death_WeaponR")))
+	if (UAnimSequenceBase* FastDeathAnimation = LoadObject<UAnimSequenceBase>(nullptr, TEXT("/Game/ModularCharacterSkeleton/Animations/Skeleton_Anim_Death_Unarmed.Skeleton_Anim_Death_Unarmed")))
 	{
-		DeathAnimation = BruteDeathAnimation;
+		DeathAnimation = FastDeathAnimation;
 	}
 }
