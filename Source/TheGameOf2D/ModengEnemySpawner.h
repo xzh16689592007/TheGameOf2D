@@ -51,6 +51,30 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner")
 	TArray<TSubclassOf<AModengEnemy>> EnemyTypes;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Boss")
+	TSubclassOf<AModengEnemy> BossEnemyClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Boss")
+	bool bSpawnBossOnFinalWave = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Boss", meta = (ClampMin = "1"))
+	int32 BossCountFinalWave = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Level Flow")
+	bool bAutoLoadSecondLevelAfterLevelOne = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Level Flow")
+	bool bApplySecondLevelDefaults = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Level Flow")
+	FName LevelOneName = TEXT("L_Level01_Street");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Level Flow")
+	FName LevelTwoName = TEXT("L_Level02_BridgeMarket");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Level Flow", meta = (ClampMin = "0.0"))
+	float LevelTravelDelay = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Wave", meta = (ClampMin = "0.1"))
 	float SpawnInterval = 4.0f;
 
@@ -101,11 +125,14 @@ protected:
 
 	FTimerHandle SpawnTimer;
 	FTimerHandle NextWaveTimer;
+	FTimerHandle LevelTravelTimer;
 	UPROPERTY(Transient)
 	TObjectPtr<UModengResultWidget> ResultWidget;
 
 	bool bWaveActive = false;
 	bool bGameEnded = false;
+	int32 BossesSpawnedThisWave = 0;
+	int32 BossesToSpawnThisWave = 0;
 
 	UFUNCTION(BlueprintCallable, Category = "Spawner")
 	void SpawnEnemy();
@@ -116,6 +143,12 @@ protected:
 	int32 CountAliveEnemies() const;
 	bool TryFindSpawnLocation(FVector& OutSpawnLocation) const;
 	bool AreAllLanternsExtinguished() const;
+	bool IsCurrentLevel(FName LevelName) const;
+	bool DoesConfiguredSecondLevelExist() const;
+	bool ShouldSpawnBossThisWave() const;
+	bool ShouldLoadSecondLevelOnVictory() const;
+	void ApplyCurrentLevelDefaults();
+	void OpenConfiguredSecondLevel();
 	void CheckWaveProgress();
 	void EndGame(bool bPlayerWon);
 	void ShowResultWidget(bool bPlayerWon);

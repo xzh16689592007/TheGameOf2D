@@ -10,6 +10,8 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/PackageName.h"
+#include "ModengBossEnemy.h"
 #include "ModengEnemy.h"
 #include "ModengExploderEnemy.h"
 #include "ModengFastEnemy.h"
@@ -28,11 +30,14 @@ AModengEnemySpawner::AModengEnemySpawner()
 		AModengExploderEnemy::StaticClass(),
 		AModengRangedEnemy::StaticClass()
 	};
+	BossEnemyClass = AModengBossEnemy::StaticClass();
 }
 
 void AModengEnemySpawner::BeginPlay()
 {
 	Super::BeginPlay();
+
+	ApplyCurrentLevelDefaults();
 
 	bool bHasRangedEnemy = false;
 	for (const TSubclassOf<AModengEnemy>& EnemyClass : EnemyTypes)
@@ -81,12 +86,12 @@ void AModengEnemySpawner::Tick(float DeltaSeconds)
 
 void AModengEnemySpawner::SpawnEnemy()
 {
-	if (bGameEnded || !bWaveActive || EnemyTypes.Num() == 0)
+	if (bGameEnded || !bWaveActive || (EnemyTypes.Num() == 0 && !BossEnemyClass))
 	{
 		return;
 	}
 
-	if (EnemiesSpawnedThisWave >= EnemiesToSpawnThisWave)
+	if (EnemiesSpawnedThisWave >= EnemiesToSpawnThisWave && BossesSpawnedThisWave >= BossesToSpawnThisWave)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 		return;
@@ -97,8 +102,18 @@ void AModengEnemySpawner::SpawnEnemy()
 		return;
 	}
 
-	const int32 EnemyIndex = FMath::RandRange(0, EnemyTypes.Num() - 1);
-	TSubclassOf<AModengEnemy> EnemyClass = EnemyTypes[EnemyIndex];
+	TSubclassOf<AModengEnemy> EnemyClass = nullptr;
+	const bool bShouldSpawnBoss = BossesSpawnedThisWave < BossesToSpawnThisWave && BossEnemyClass;
+	if (bShouldSpawnBoss)
+	{
+		EnemyClass = BossEnemyClass;
+	}
+	else if (EnemyTypes.Num() > 0)
+	{
+		const int32 EnemyIndex = FMath::RandRange(0, EnemyTypes.Num() - 1);
+		EnemyClass = EnemyTypes[EnemyIndex];
+	}
+
 	if (!EnemyClass)
 	{
 		return;
@@ -118,11 +133,24 @@ void AModengEnemySpawner::SpawnEnemy()
 	AModengEnemy* SpawnedEnemy = GetWorld()->SpawnActor<AModengEnemy>(EnemyClass, SpawnLocation, SpawnRotation, SpawnParams);
 	if (SpawnedEnemy)
 	{
-		EnemiesSpawnedThisWave++;
+		if (bShouldSpawnBoss)
+		{
+			BossesSpawnedThisWave++;
+		}
+		else
+		{
+			EnemiesSpawnedThisWave++;
+		}
 
 		if (bShowGameplayDebugMessages && GEngine)
 		{
-			const FString Message = FString::Printf(TEXT("Wave %d enemy spawned (%d/%d)"), CurrentWave, EnemiesSpawnedThisWave, EnemiesToSpawnThisWave);
+			const FString Message = FString::Printf(
+				TEXT("Wave %d spawned enemy %d/%d, boss %d/%d"),
+				CurrentWave,
+				EnemiesSpawnedThisWave,
+				EnemiesToSpawnThisWave,
+				BossesSpawnedThisWave,
+				BossesToSpawnThisWave);
 			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, Message);
 		}
 	}
@@ -144,11 +172,13 @@ void AModengEnemySpawner::StartNextWave()
 
 	EnemiesSpawnedThisWave = 0;
 	EnemiesToSpawnThisWave = BaseEnemiesPerWave + ExtraEnemiesPerWave * (CurrentWave - 1);
+	BossesSpawnedThisWave = 0;
+	BossesToSpawnThisWave = ShouldSpawnBossThisWave() ? BossCountFinalWave : 0;
 	bWaveActive = true;
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		const FString Message = FString::Printf(TEXT("Wave %d started: %d enemies"), CurrentWave, EnemiesToSpawnThisWave);
+		const FString Message = FString::Printf(TEXT("Wave %d started: %d enemies, %d boss"), CurrentWave, EnemiesToSpawnThisWave, BossesToSpawnThisWave);
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, Message);
 	}
 
@@ -221,6 +251,61 @@ bool AModengEnemySpawner::AreAllLanternsExtinguished() const
 	return bFoundLantern;
 }
 
+bool AModengEnemySpawner::IsCurrentLevel(FName LevelName) const
+{
+	if (LevelName.IsNone() || !GetWorld())
+	{
+		return false;
+	}
+
+	return GetWorld()->GetMapName().EndsWith(LevelName.ToString());
+}
+
+bool AModengEnemySpawner::DoesConfiguredSecondLevelExist() const
+{
+	if (LevelTwoName.IsNone())
+	{
+		return false;
+	}
+
+	const FString PackageName = FString::Printf(TEXT("/Game/MoDeng/Maps/%s"), *LevelTwoName.ToString());
+	return FPackageName::DoesPackageExist(PackageName);
+}
+
+bool AModengEnemySpawner::ShouldSpawnBossThisWave() const
+{
+	return bSpawnBossOnFinalWave && BossEnemyClass && CurrentWave == TotalWaves;
+}
+
+bool AModengEnemySpawner::ShouldLoadSecondLevelOnVictory() const
+{
+	return bAutoLoadSecondLevelAfterLevelOne && IsCurrentLevel(LevelOneName) && !LevelTwoName.IsNone() && DoesConfiguredSecondLevelExist();
+}
+
+void AModengEnemySpawner::ApplyCurrentLevelDefaults()
+{
+	if (!bApplySecondLevelDefaults || !IsCurrentLevel(LevelTwoName))
+	{
+		return;
+	}
+
+	TotalWaves = FMath::Max(TotalWaves, 4);
+	BaseEnemiesPerWave = FMath::Max(BaseEnemiesPerWave, 5);
+	ExtraEnemiesPerWave = FMath::Max(ExtraEnemiesPerWave, 2);
+	MaxAliveEnemies = FMath::Max(MaxAliveEnemies, 8);
+	SpawnInterval = FMath::Min(SpawnInterval, 3.0f);
+	bSpawnBossOnFinalWave = true;
+	BossCountFinalWave = FMath::Max(BossCountFinalWave, 1);
+}
+
+void AModengEnemySpawner::OpenConfiguredSecondLevel()
+{
+	if (!LevelTwoName.IsNone())
+	{
+		UGameplayStatics::OpenLevel(this, LevelTwoName);
+	}
+}
+
 void AModengEnemySpawner::CheckWaveProgress()
 {
 	if (!bWaveActive)
@@ -228,7 +313,7 @@ void AModengEnemySpawner::CheckWaveProgress()
 		return;
 	}
 
-	if (EnemiesSpawnedThisWave < EnemiesToSpawnThisWave)
+	if (EnemiesSpawnedThisWave < EnemiesToSpawnThisWave || BossesSpawnedThisWave < BossesToSpawnThisWave)
 	{
 		return;
 	}
@@ -267,10 +352,27 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 	bWaveActive = false;
 	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 	GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
+	GetWorld()->GetTimerManager().ClearTimer(LevelTravelTimer);
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 8.0f, bPlayerWon ? FColor::Green : FColor::Red, bPlayerWon ? TEXT("Victory: all waves cleared") : TEXT("Defeat: all lanterns extinguished"));
+	}
+
+	if (bPlayerWon && ShouldLoadSecondLevelOnVictory())
+	{
+		OnVictory.Broadcast();
+		OnGameEnded.Broadcast(true);
+
+		if (LevelTravelDelay > 0.0f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(LevelTravelTimer, this, &AModengEnemySpawner::OpenConfiguredSecondLevel, LevelTravelDelay, false);
+		}
+		else
+		{
+			OpenConfiguredSecondLevel();
+		}
+		return;
 	}
 
 	if (bPlayerWon)
