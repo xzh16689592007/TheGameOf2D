@@ -270,15 +270,20 @@ void ASideScrollingCharacter::DoMove(float Forward)
 	{
 		if (bAttackAnimationInProgress)
 		{
-			ActionValueY = 0.0f;
-			if (!bAirToFloorAttackInProgress)
+			const bool bUsesUpperBodySheatheSlot = CombatTransitionSlotName == FName(TEXT("UpperBodyCombatSlot"));
+			const bool bCanMoveDuringCurrentAttack = CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing && (bAllowMovementDuringSheathing || bUsesUpperBodySheatheSlot);
+			if (!bCanMoveDuringCurrentAttack)
 			{
-				if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+				ActionValueY = 0.0f;
+				if (!bAirToFloorAttackInProgress)
 				{
-					MovementComponent->StopMovementImmediately();
+					if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+					{
+						MovementComponent->StopMovementImmediately();
+					}
 				}
+				return;
 			}
-			return;
 		}
 
 		// save the movement values
@@ -387,6 +392,39 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoAttack()
 {
+	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+		if (bAttackHitWindowActive)
+		{
+			EndAttackHitWindow();
+		}
+
+		UAnimMontage* MontageToStop = ActiveCombatTransitionMontage;
+		ActiveCombatTransitionMontage = nullptr;
+		if (MontageToStop)
+		{
+			if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+			{
+				AnimInstance->Montage_Stop(0.03f, MontageToStop);
+			}
+		}
+
+		ResetAttackCombo();
+		bAttackAnimationInProgress = false;
+		SetCombatWeaponDrawn(true);
+
+		if (GetCharacterMovement() && GetCharacterMovement()->IsFalling())
+		{
+			StartAirToFloorAttack();
+		}
+		else
+		{
+			StartGroundAttackMontage();
+		}
+		return;
+	}
+
 	if (bAttackAnimationInProgress)
 	{
 		if (bAirToFloorAttackInProgress)
@@ -1059,6 +1097,7 @@ bool ASideScrollingCharacter::PlayCombatTransitionAnimation(UAnimSequenceBase* A
 	}
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	ActiveCombatTransitionMontage = nullptr;
 
 	const float SafePlayRate = FMath::Max(CombatTransitionAnimationPlayRate, 0.1f);
 	if (!bAttackAnimationInProgress)
@@ -1066,17 +1105,42 @@ bool ASideScrollingCharacter::PlayCombatTransitionAnimation(UAnimSequenceBase* A
 		MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
 	}
 
+	if (PlayerAnimClass && CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
+	{
+		CharacterMesh->GlobalAnimRateScale = 1.0f;
+		CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		CharacterMesh->SetAnimInstanceClass(PlayerAnimClass);
+	}
+
 	bAttackAnimationInProgress = true;
 	CurrentCombatAnimationPhase = NewAnimationPhase;
+
+	if (UAnimInstance* AnimInstance = CharacterMesh->GetAnimInstance())
+	{
+		if (UAnimMontage* TransitionMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+			AnimationToPlay,
+			CombatTransitionSlotName,
+			FMath::Max(CombatTransitionBlendInTime, 0.0f),
+			FMath::Max(CombatTransitionBlendOutTime, 0.0f),
+			SafePlayRate))
+		{
+			ActiveCombatTransitionMontage = TransitionMontage;
+
+			FOnMontageEnded EndDelegate;
+			EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnCombatTransitionMontageEnded);
+			AnimInstance->Montage_SetEndDelegate(EndDelegate, TransitionMontage);
+			return true;
+		}
+	}
+
 	CharacterMesh->PlayAnimation(AnimationToPlay, false);
 	CharacterMesh->GlobalAnimRateScale = SafePlayRate;
 
 	const float Duration = AnimationToPlay->GetPlayLength() / SafePlayRate;
 	if (Duration <= 0.0f)
 	{
-		CharacterMesh->GlobalAnimRateScale = 1.0f;
-		bAttackAnimationInProgress = false;
-		CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+		RestorePlayerAnimationBlueprint();
+		ActiveCombatTransitionMontage = nullptr;
 		return false;
 	}
 
@@ -1094,6 +1158,24 @@ void ASideScrollingCharacter::StartSheatheOrRestoreAnimation()
 	RestorePlayerAnimationBlueprint();
 	ResetAttackCombo();
 	SetCombatWeaponDrawn(false);
+}
+
+void ASideScrollingCharacter::FinishCombatTransitionState()
+{
+	RestorePlayerAnimationBlueprint();
+	ResetAttackCombo();
+	SetCombatWeaponDrawn(false);
+}
+
+void ASideScrollingCharacter::OnCombatTransitionMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveCombatTransitionMontage)
+	{
+		return;
+	}
+
+	ActiveCombatTransitionMontage = nullptr;
+	FinishCombatTransitionState();
 }
 
 void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
@@ -1115,9 +1197,7 @@ void ASideScrollingCharacter::FinishAttackAnimation()
 {
 	if (CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::Sheathing)
 	{
-		RestorePlayerAnimationBlueprint();
-		ResetAttackCombo();
-		SetCombatWeaponDrawn(false);
+		FinishCombatTransitionState();
 		return;
 	}
 
@@ -1164,9 +1244,10 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 	bAttackHitPending = false;
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
+	ActiveCombatTransitionMontage = nullptr;
 	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 
-	if (PlayerAnimClass)
+	if (PlayerAnimClass && CharacterMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
 	{
 		CharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 		CharacterMesh->SetAnimInstanceClass(PlayerAnimClass);

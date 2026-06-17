@@ -252,7 +252,12 @@
       - `Attack_Air_To_Floor_End_01_Seq`
     - Air-to-floor attack still preserves downward motion and plays the end/landing impact when the character lands.
     - `Idle_Combat_To_Idle_Seq` is still used as the sheath/restore animation through `CombatToIdleAnimation`.
-    - `CombatTransitionAnimationPlayRate` controls sheath/restore speed.
+    - Sheath/restore now prefers dynamic montage playback on `CombatTransitionSlotName` instead of hard-switching the mesh to single-node animation.
+    - `CombatTransitionSlotName`, `CombatTransitionBlendInTime`, `CombatTransitionBlendOutTime`, and `CombatTransitionAnimationPlayRate` control sheath/restore slot playback.
+    - `ABP_Tomoe_SideScroller` now supports an `UpperBodyCombatSlot` layered over locomotion so sheath/restore can affect the upper body while legs keep running.
+    - Sheathing can be interrupted by pressing attack again; C++ stops the active sheath montage and immediately starts a new ground or air-to-floor attack.
+    - Movement is allowed during sheathing when `bAllowMovementDuringSheathing` is enabled or when `CombatTransitionSlotName` is `UpperBodyCombatSlot`.
+    - Before sheath/restore playback, C++ restores `PlayerAnimClass` if the mesh is still in single-node animation mode from the air-to-floor attack. This avoids replaying the air-to-floor end animation instead of sheathing.
     - Current primary hit detection uses the katana trace points on `BP_SideScrollingCharacter`:
       - `KatanaTraceStart`
       - `KatanaTraceEnd`
@@ -478,34 +483,21 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone before the current pending commit: commit `1af8cdd` is pulled from `origin/main`. Tomoe player art, CombatMaster sword animation assets, katana trace attack window, new lantern art, modular skeleton enemy visuals, skeleton wizard ranged enemy, lantern repair/light fixes, melee enemy loadout fixes, and `DefaultEngine.ini` game map/game mode changes are all on GitHub.
+Latest synced milestone before the current pending commit: commit `d2c824f` is pulled from `origin/main`. Tomoe jump/fall locomotion and the montage-driven ground combo are already on GitHub.
 
 Current pending update in this handoff:
 
-- `ABP_Tomoe_SideScroller` now has `IsInAir` and `VelocityZ`.
-- Tomoe locomotion now separates `JumpStart` and `FallLoop`.
-- Jump/fall transitions were tested in UE after replacing an incorrect non-Tomoe jump animation.
-- Player attacks now use a C++ four-step combo system with `FSideScrollingAttackStep`.
-- Default combo animations are the retargeted Sword_Animations Tomoe assets under `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations`.
-- Draw/sheath combat transitions are now wired in C++ around the four-step combo:
-  - Attack from idle plays `Idle_To_Idle_Combat_Seq`, then combo step 1.
-  - If a combo step finishes without queued attack input, C++ plays `Idle_Combat_To_Idle_Seq` before restoring `ABP_Tomoe_SideScroller`.
-  - `CombatTransitionAnimationPlayRate` controls draw/sheath speed.
-- The user set up a two-sword Blueprint presentation approach in `BP_SideScrollingCharacter`: `Sword_Hand`, `Sword_Sheathed`, `ShowHandSword`, and `ShowSheathedSword`. AnimNotify Blueprints for switching visibility were in progress.
-- Current animation quality issue: the draw/sheath animations and the current four combo attacks do not transition naturally. The immediate next task is to redo/replace the combo attack animations using the `RTG_SwordMannequin_To_Tomoe` retarget workflow, then retest with the existing C++ combo/hit-detection baseline.
-- Katana hit detection now supports automatic weapon-motion timing: the whole attack step can be observed, but damage only applies when the blade trace points move fast enough.
-- Weapon trace debug drawing can be enabled with `bDrawWeaponTraceDebug`; cyan/red/silver indicate active/hit/too-slow traces.
-- New direct `Sword_Animations` mannequin-to-Tomoe retarget setup exists:
-  - `Content/MoDeng/Animations/Retarget/IKR_SwordMannequin.uasset`
-  - `Content/MoDeng/Animations/RTG_SwordMannequin_To_Tomoe.uasset`
-  - `Content/SamuraiGirlTomoe/Mesh/IKR_Tomoe.uasset` was edited for this workflow.
-  - Retargeter root-motion operation stack is configured with source root `root`, target root `root`, and target pelvis `pelvis`; the previous root/pelvis warning spam was resolved.
-- A Montage/root-motion/whole-combo experiment was attempted and then reverted/abandoned because it made Tomoe snap or return to the start point after attacks.
-- Old one-off attack retarget tests and failed Montage/root-motion test assets were removed intentionally because they are not part of the active setup.
-- A full build succeeded after the latest reflected C++ changes with:
+- `ABP_Tomoe_SideScroller` was updated with an `UpperBodyCombatSlot` layered over the cached full-body combat pose. The base locomotion pose continues to drive the legs while sheath/restore can play on the upper body.
+- `BP_SideScrollingCharacter` was updated to use the upper-body sheath flow. `CombatTransitionSlotName` should point to `UpperBodyCombatSlot`.
+- `SKEL_Tomoe_Skeleton` was updated with the new slot configuration needed by the upper-body combat slot.
+- C++ sheath/restore flow now uses dynamic montage playback when possible, controlled by `CombatTransitionSlotName`, `CombatTransitionBlendInTime`, `CombatTransitionBlendOutTime`, and `CombatTransitionAnimationPlayRate`.
+- C++ allows movement during sheathing when `bAllowMovementDuringSheathing` is enabled or when the transition slot is `UpperBodyCombatSlot`.
+- Pressing attack during sheathing now interrupts the sheath montage and immediately starts a new ground attack, or air-to-floor attack if the character is falling.
+- Air-to-floor end now safely restores `PlayerAnimClass` before sheath/restore slot playback if the mesh was still in single-node animation mode, preventing the landing attack end animation from replaying instead of sheathing.
+- A full build after these C++ changes succeeded on 2026-06-17 with:
   - `Result: Succeeded`
-  - Last successful build date in this thread: `2026-06-12`
-- Current local working tree includes C++ combo changes, `BP_SideScrollingCharacter.uasset` changes, newly retargeted Tomoe `Sword_Animations` attack assets, imported `Content/Sword_Animations`, and the new `IKR_SwordMannequin` / `RTG_SwordMannequin_To_Tomoe` retarget assets.
+- Turn animation support was considered and then abandoned for now; do not treat the uncommitted `Content/MoDeng/Animations/Tomoe/Turn` folder as part of the active setup unless the team intentionally revisits turn-in-place.
+- `Content/MoDeng/Animations/RTG_CombatKatana_To_Tomoe.uasset` may appear deleted locally from editor/asset cleanup while experimenting. It is not part of this pending update and should not be committed as a deletion unless the team intentionally removes that retargeter.
 - `Config/DefaultEditor.ini` may still be locally modified from editor preview/profile noise and should not be committed unless intentional.
 
 ## Git Setup And Notes
@@ -543,9 +535,10 @@ git lfs pull
   - Current ground attacks are four independent `AM_Tomoe_GroundAttack_*` montages on `DefaultGroup.GroundAttackSlot`.
   - The four `Combo_Attack_02_0*_Seq` assets have root motion enabled, and `ABP_Tomoe_SideScroller` should stay on `Root Motion from Montages Only`.
   - Combo chaining is driven by native montage notifies, not by old `AttackComboSteps` or direct `PlayAnimation()` ground combo code.
-  - Current priority: test the four-montage combo in PIE and tune `Open Ground Combo Window`, `Close Ground Combo Window`, and `Commit Ground Combo` notify positions.
+  - Current priority: validate the upper-body sheath flow in PIE: sheathing should allow movement when using `UpperBodyCombatSlot`, and pressing attack during sheathing should immediately start a new attack.
   - Keep `Combo_Attack_02_All_Seq` only as a visual timing/pose reference for natural section-to-section connection.
   - Attack damage timing for ground combo is now authored by `BeginGroundAttackTrace` / `EndGroundAttackTrace` notifies. Air-to-floor attack still uses direct sequence playback and C++ trace logic.
+  - Air-to-floor landing should transition into sheath/restore, not replay the landing attack end animation. If this regresses, inspect the single-node animation to AnimBP transition before changing animation assets.
   - Tomoe base locomotion now has idle/run/jump-start/fall-loop. Landing polish is still not implemented as a dedicated state.
   - Use only Tomoe-compatible or Tomoe-retargeted animation assets in `ABP_Tomoe_SideScroller`; using the modular skeleton enemy jump animations directly causes body deformation.
 - Visible katana setup works, but socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
@@ -556,7 +549,18 @@ git lfs pull
 
 ## Suggested Next Steps
 
-1. Test and tune the four-montage ground combo:
+1. Validate sheath movement and interrupt behavior:
+   - Confirm `ABP_Tomoe_SideScroller` routes the cached full-body combat pose through `UpperBodyCombatSlot` into a layered blend per bone.
+   - Confirm `BP_SideScrollingCharacter.CombatTransitionSlotName = UpperBodyCombatSlot`.
+   - Attack once, then hold movement during sheath: the legs should keep running instead of sliding or standing still.
+   - Attack again during sheath: sheath should stop and a new attack should begin immediately.
+   - Test air-to-floor attack landing: it should play the landing impact/end, then sheath, without replaying the landing attack end in place.
+
+2. Clean up combat debug visuals for normal playtests:
+   - Disable `bDrawWeaponTraceDebug` unless actively debugging blade contact.
+   - Cyan/red/silver weapon traces are useful for tuning, but they dominate gameplay footage.
+
+3. Tune the four-montage ground combo:
    - Open `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.uasset` through `AM_Tomoe_GroundAttack_4.uasset`.
    - Confirm all four use `DefaultGroup.GroundAttackSlot`.
    - Confirm `ABP_Tomoe_SideScroller` root motion mode is `Root Motion from Montages Only`.
@@ -565,30 +569,30 @@ git lfs pull
    - If input feels too strict, tune notify positions first, not C++.
    - Use `Combo_Attack_02_All_Seq` as the reference for natural body-pose connection points.
 
-2. Polish draw/sheath flow:
+4. Polish draw/sheath flow:
    - Confirm `CombatToIdleAnimation` on `BP_SideScrollingCharacter` points to `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`.
    - Keep the initial sword state as sheathed: hand sword hidden, sheathed sword visible.
    - Add or tune weapon visibility notifies later if the hand/sheathed sword swap needs exact frame timing.
 
-3. Tune ground attack hit windows:
-   - `BeginGroundAttackTrace` should be near visible blade contact.
-   - `EndGroundAttackTrace` should be after the blade leaves the hit area.
-   - Set `ComboStepIndex` on each begin notify: 1, 2, 3, 4.
-   - Enable `bDrawWeaponTraceDebug` temporarily if a visible blade pass misses.
-
-4. Add attack hit feedback:
+5. Add attack hit feedback:
    - Add short hit stop on successful player melee hit.
    - Add enemy hit flash/material flash.
    - Add sword whoosh and hit SFX.
    - Add simple hit VFX / slash trail from an existing project asset or a newly imported VFX pack; the previous `SwordAnimsetPro` project-local test content was removed.
 
-5. Polish Tomoe jump/fall locomotion:
+6. Tune ground attack hit windows:
+   - `BeginGroundAttackTrace` should be near visible blade contact.
+   - `EndGroundAttackTrace` should be after the blade leaves the hit area.
+   - Set `ComboStepIndex` on each begin notify: 1, 2, 3, 4.
+   - Enable `bDrawWeaponTraceDebug` temporarily if a visible blade pass misses.
+
+7. Polish Tomoe jump/fall locomotion:
    - Current `JumpStart` / `FallLoop` split is working.
    - Add a dedicated `Land` state only if it does not make movement feel sticky.
    - Tune transition blend duration between `JumpStart` and `FallLoop` if the pose pops.
    - Keep using Tomoe-compatible or Tomoe-retargeted jump/fall animations; do not use enemy skeleton animations directly.
 
-6. Continue polishing Tomoe player setup:
+8. Continue polishing Tomoe player setup:
    - Open `BP_SideScrollingCharacter`.
    - Confirm `CharacterMesh0` and class default `PlayerSkeletalMesh` both point to `SK_SAMURAIGIRL_01`.
    - Confirm class default `PlayerAnimClass` points to `ABP_Tomoe_SideScroller`.

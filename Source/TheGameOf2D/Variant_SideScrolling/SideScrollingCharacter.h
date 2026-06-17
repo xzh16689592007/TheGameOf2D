@@ -140,6 +140,18 @@ protected:
 	bool bPlayCombatTransitionAnimations = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	FName CombatTransitionSlotName = TEXT("GroundAttackSlot");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.0"))
+	float CombatTransitionBlendInTime = 0.08f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation", meta = (ClampMin = "0.0"))
+	float CombatTransitionBlendOutTime = 0.18f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
+	bool bAllowMovementDuringSheathing = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	bool bRestoreMeshTransformAfterAttackAnimation = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
@@ -267,6 +279,7 @@ protected:
 	bool bGroundComboInputWindowOpen = false;
 	bool bAirToFloorAttackInProgress = false;
 	UAnimMontage* ActiveGroundAttackMontage = nullptr;
+	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -395,6 +408,8 @@ protected:
 	float PlayAirToFloorAnimation(UAnimSequenceBase* AnimationToPlay, bool bLooping, ESideScrollingCombatAnimationPhase NewAnimationPhase);
 	bool PlayCombatTransitionAnimation(UAnimSequenceBase* AnimationToPlay, ESideScrollingCombatAnimationPhase NewAnimationPhase);
 	void StartSheatheOrRestoreAnimation();
+	void FinishCombatTransitionState();
+	void OnCombatTransitionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void SetCombatWeaponDrawn(bool bDrawn);
 	void ApplyPendingAttackHit();
 	void BeginAttackHitWindow();
