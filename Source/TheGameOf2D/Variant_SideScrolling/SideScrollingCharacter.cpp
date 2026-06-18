@@ -1063,6 +1063,7 @@ void ASideScrollingCharacter::FinishGroundAttackMontageState(bool bInterrupted)
 		if (bRestoreMeshTransformAfterAttackAnimation)
 		{
 			CharacterMesh->SetRelativeTransform(MeshTransformBeforeAttackAnimation);
+			UpdateFacingDirection(LastFacingX);
 		}
 	}
 }
@@ -1705,6 +1706,7 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 	if (bRestoreMeshTransformAfterAttackAnimation)
 	{
 		CharacterMesh->SetRelativeTransform(MeshTransformBeforeAttackAnimation);
+		UpdateFacingDirection(LastFacingX);
 	}
 
 	bAttackAnimationInProgress = false;
