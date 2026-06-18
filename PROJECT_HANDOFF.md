@@ -52,6 +52,19 @@
   - Weapon examples:
     - `Content/CombatMasterAnimBundle/Weapon/Katana`
     - `Content/CombatMasterAnimBundle/Weapon/Sword`
+- Current player attack VFX folder: `Content/FX`
+  - `Content/FX/NewNiagaraSystem.uasset`
+    - Current prototype slash/ribbon effect used by Tomoe attack montages.
+    - This should be renamed later to something descriptive such as `NS_Tomoe_SlashRibbon`.
+  - `Content/FX/Particles`
+    - `P_HitPoint.uasset`: Cascade hit-point flash used during early VFX testing.
+    - `P_Trail.uasset`: Cascade trail asset; its emitter loop settings were changed so it no longer triggers the animation-notify infinite-loop warning, but the current active slash effect is Niagara.
+  - `Content/FX/Particles/Materials`
+    - `M_Trail_01.uasset` and `M_Trail_02.uasset` were repaired by assigning missing texture samples from the local FX texture folder.
+    - `M_Trail_02` is currently the more useful ribbon material for the Niagara slash.
+    - `M_Lightning.uasset`, `M_Flare.uasset`, and `M_Sprite.uasset` are available for future lightning, flash, or sprite particles.
+  - `Content/FX/Particles/Textures`
+    - Useful trail textures include `T_Lightning`, `T_Tile_Noise_Tendril_01`, and `T_Turbulence_Seamless`.
 - Imported sword animation folder: `Content/Sword_Animations`
   - Source library path: `D:\UE素材库\Sword Animation Pack宝剑动画套装\Sword Animation Pack宝剑动画套装\Sword Animation Pack\Sword Animation Pack 5.1\Sword_Animations`
   - This is the currently preferred player attack source for the prototype because it has cleanly grouped ground combo sequence assets.
@@ -84,12 +97,14 @@
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_2.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_3.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_4.uasset`
+  - The four ground attack montages now have a `NewNiagaraSystem` animation notify for prototype slash/ribbon VFX.
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_01_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_02_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_03_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_04_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/Combo_Attack_02_All_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/AM_Tomoe_AirToFloorAttack.uasset`
+  - `AM_Tomoe_AirToFloorAttack` now also references the same prototype Niagara slash effect.
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Start_01_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_Loop_01_Seq.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AirToFloor_01/Attack_Air_To_Floor_End_01_Seq.uasset`
@@ -567,6 +582,17 @@ Current player update in this handoff:
 - Added `SideScrollingAnimNotify_OpenGroundMoveCancelWindow`, displayed in UE as `OpenGroundMoveCancelWindow`, as a searchable alias for the existing movement-cancel notify.
 - `OpenGroundMoveCancelWindow` / `Open Move Cancel Window` now also works during the air-to-floor `End` phase.
 - Added/updated Tomoe jump assets under `Content/MoDeng/Animations/Tomoe/Jump`.
+- Added prototype player attack VFX:
+  - Created `Content/FX/NewNiagaraSystem.uasset` as a simple Niagara ribbon/slash system.
+  - Added the Niagara system to `AM_Tomoe_GroundAttack_1` through `AM_Tomoe_GroundAttack_4`.
+  - Added the same Niagara system to `AM_Tomoe_AirToFloorAttack`.
+  - Imported/reused `Content/FX/Particles` Cascade assets, materials, and textures as source VFX resources.
+  - Repaired `M_Trail_01` / `M_Trail_02` by assigning missing local FX textures; `M_Trail_02` is the current practical ribbon material.
+  - `P_HitPoint` was verified as a visible simple particle notify option; `P_Trail` is less useful for the current Montage setup than the Niagara ribbon.
+- Updated the Tomoe weapon preview/runtime setup:
+  - Added `Sword_start`, `Sword_end`, and `Show` sockets/preview helpers on `SKEL_Tomoe_Skeleton`.
+  - `BP_SideScrollingCharacter` now references the Sci-fi Frozen Sword assets for the visible weapon/scabbard setup.
+  - The weapon still uses C++ trace components for damage; the mesh itself should remain non-colliding.
 - A full build after these C++ changes succeeded on 2026-06-17 with:
   - `Result: Succeeded`
 - `outputs/`, `tools/`, and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
@@ -616,11 +642,12 @@ git lfs pull
   - Air-to-floor `End` movement cancel can be tuned by placing `OpenGroundMoveCancelWindow` / `Open Move Cancel Window` in the montage timeline.
   - Tomoe base locomotion now has idle/run/jump-start/fall-loop. Landing polish is still not implemented as a dedicated state.
   - Use only Tomoe-compatible or Tomoe-retargeted animation assets in `ABP_Tomoe_SideScroller`; using the modular skeleton enemy jump animations directly causes body deformation.
-- Visible katana setup works, but socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
+- Visible weapon setup now uses the Sci-fi Frozen Sword look in the player Blueprint / Tomoe preview setup. Socket/rotation and trace point placement may still need tuning if future attack animations change the blade path.
+- Player attack VFX now exists as a prototype Niagara slash ribbon on the ground and air-to-floor attack montages. It is still an artist-tuning pass, not final polish: rename `NewNiagaraSystem`, tune ribbon color/width/lifetime, and validate readability in PIE.
 - Enemy movement currently follows X axis only. This is fine for ground-level lanterns, but platform lanterns need route points, flying enemies, ranged enemies, or a 2.5D path system later.
 - Most debug messages now have exposed `bShowGameplayDebugMessages` toggles and are off by default.
 - If all lanterns are on platforms or unreachable by X-only enemies, enemies may not behave as intended.
-- Current game lacks polished player art, sound, particles, and UI art.
+- Current game still lacks polished sound, final particles, and UI art.
 
 ## Suggested Next Steps
 
@@ -682,11 +709,13 @@ git lfs pull
    - Tune the `AN_ShowSheathedSword` notify position in `Idle_Combat_To_Idle_Seq` to control when the sheathed sword reappears during the return-to-idle animation.
    - If a visibility notify needs Blueprint logic, call `SetCombatWeaponDrawnForNotify(false)` or `SetSceneComponentVisibleByName()` on `BP_SideScrollingCharacter`.
 
-10. Add attack hit feedback:
+10. Polish attack hit feedback and VFX:
    - Add short hit stop on successful player melee hit.
    - Add enemy hit flash/material flash.
    - Add sword whoosh and hit SFX.
-   - Add simple hit VFX / slash trail from an existing project asset or a newly imported VFX pack; the previous `SwordAnimsetPro` project-local test content was removed.
+   - Rename `Content/FX/NewNiagaraSystem.uasset` to a descriptive player slash name, then update all Montage references.
+   - Tune the existing Niagara ribbon/slash on `AM_Tomoe_GroundAttack_1` through `AM_Tomoe_GroundAttack_4` and `AM_Tomoe_AirToFloorAttack`.
+   - Keep `P_HitPoint` as a simple Cascade hit-flash fallback or migrate the hit flash to Niagara later.
 
 11. Tune ground attack hit windows:
    - `BeginGroundAttackTrace` should be near visible blade contact.
@@ -711,8 +740,8 @@ git lfs pull
 
 14. Tune the visible katana/weapon:
    - Verify `Socket_Katana_R` is on Tomoe's real `hand_r` bone, not `ik_hand_r`.
-   - Verify the `Katana` component in `BP_SideScrollingCharacter` uses `SM_Katana`, parent socket `Socket_Katana_R`, and `NoCollision`.
-   - Verify `KatanaTraceStart` and `KatanaTraceEnd` remain children of `Katana`.
+   - Verify the visible hand weapon in `BP_SideScrollingCharacter` uses the intended Sci-fi Frozen Sword mesh, parent socket `Socket_Katana_R`, and `NoCollision`.
+   - Verify `KatanaTraceStart` / `KatanaTraceEnd` or the current `Sword_start` / `Sword_end` helper points remain aligned with the blade root and tip.
    - If a new attack animation misses despite visible blade contact, tune `AttackHitWindowStartRatio`, `AttackHitWindowEndRatio`, and `WeaponTraceRadius` first.
    - Tune socket transform in `SKEL_Tomoe_Skeleton` until the grip sits naturally in the right hand.
    - Keep C++ hit detection separate from weapon mesh collision for now.
