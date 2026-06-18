@@ -662,7 +662,6 @@ void ASideScrollingCharacter::StartAirToFloorAttack()
 			AnimInstance->Montage_JumpToSection(TEXT("Start"), ActiveAirToFloorAttackMontage);
 			AnimInstance->Montage_SetNextSection(TEXT("Start"), TEXT("Loop"), ActiveAirToFloorAttackMontage);
 			AnimInstance->Montage_SetNextSection(TEXT("Loop"), TEXT("Loop"), ActiveAirToFloorAttackMontage);
-			BeginAttackHitWindow();
 			return;
 		}
 
@@ -670,7 +669,6 @@ void ASideScrollingCharacter::StartAirToFloorAttack()
 	}
 
 	const float StartDuration = PlayAirToFloorAnimation(StartAnimation ? StartAnimation : LoopAnimation, false, ESideScrollingCombatAnimationPhase::AirToFloorStart);
-	BeginAttackHitWindow();
 
 	if (StartDuration <= 0.0f)
 	{
@@ -936,6 +934,21 @@ void ASideScrollingCharacter::LoopGroundCombo()
 
 void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
 {
+	if (bAirToFloorAttackInProgress || CurrentCombatAnimationPhase == ESideScrollingCombatAnimationPhase::AirToFloorEnd)
+	{
+		PendingAttackFacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
+		CurrentAttackDamageMultiplier = 1.35f;
+		CurrentAttackKnockbackDistance = 45.0f;
+		CurrentWeaponTraceRadius = FMath::Max(WeaponTraceRadius, 30.0f);
+		CurrentMinimumWeaponMotionSpeed = 80.0f;
+		bCurrentUseAutomaticWeaponMotionHitWindow = true;
+		bAttackHitPending = true;
+		bAttackRegisteredHit = false;
+		HitEnemiesThisAttack.Empty();
+		BeginAttackHitWindow();
+		return;
+	}
+
 	CurrentGroundComboStep = FMath::Clamp(ComboStepIndex, 1, 4);
 	PendingAttackFacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
 	CurrentAttackDamageMultiplier = 0.75f + 0.15f * CurrentGroundComboStep;
@@ -1483,6 +1496,30 @@ void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
 		SheathedSword->SetVisibility(!bDrawn, true);
 		SheathedSword->SetHiddenInGame(bDrawn, true);
 	}
+
+	if (USceneComponent* Scabbard = FindSceneComponentByName(TEXT("Sword_InScabbard")))
+	{
+		Scabbard->SetVisibility(true, true);
+		Scabbard->SetHiddenInGame(false, true);
+	}
+}
+
+bool ASideScrollingCharacter::SetSceneComponentVisibleByName(FName ComponentName, bool bVisible, bool bPropagateToChildren)
+{
+	USceneComponent* SceneComponent = FindSceneComponentByName(ComponentName);
+	if (!SceneComponent)
+	{
+		return false;
+	}
+
+	SceneComponent->SetVisibility(bVisible, bPropagateToChildren);
+	SceneComponent->SetHiddenInGame(!bVisible, bPropagateToChildren);
+	return true;
+}
+
+void ASideScrollingCharacter::SetCombatWeaponDrawnForNotify(bool bDrawn)
+{
+	SetCombatWeaponDrawn(bDrawn);
 }
 
 void ASideScrollingCharacter::BeginRollInvincible()

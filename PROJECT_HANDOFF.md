@@ -426,15 +426,20 @@
     - A full build after the four-montage reflected C++ update succeeded on 2026-06-12 with `Result: Succeeded`.
     - Combo-window tuning should happen in the montage timeline by moving `Open Ground Combo Window`, `Close Ground Combo Window`, and `Commit Ground Combo` notifies.
     - A single whole-combo montage approach using `Combo_Attack_02_All_Seq` was discussed. It is useful as a pose/timing reference, but the active implementation is four separate montages so each hit can independently end into sheath or chain to the next hit.
-  - Initial katana weapon hookup has started:
+  - Player sword/scabbard hookup:
     - Originally used `Content/CombatMasterAnimBundle/Weapon/Katana/SM_Katana.uasset`; the user later switched the visible weapon mesh to the `Sword_Animations` pack sword to match the current animation source.
+    - Current weapon art comes from `Content/Weapon/Sci-fi_Swords_Pack_1`.
+      - Dark long blade meshes: `SM_Dark_Long_Blade_Sword` and `SM_Dark_Long_Blade_Sheath`.
+      - Frozen sci-fi sword meshes are also imported for later use.
+      - The pack uses shared master material `M_Sci-fi_Swords_Pack_1_Master` and per-weapon material instances such as `MI_Dark_Long_Blade`; if material preview is gray, verify the material instance parent and texture parameters.
     - Add/use a right-hand socket named `Socket_Katana_R` on `hand_r`.
-    - `BP_SideScrollingCharacter` now uses a two-sword display setup in progress:
+    - `BP_SideScrollingCharacter` now uses a three-component sword display setup:
       - `Sword_Hand` is the hand-held sword for combat/attacks.
-      - `Sword_Sheathed` is the sheathed/waist sword for non-combat presentation.
-      - Both should use the Sword_Animations pack `Sword` static mesh and have collision disabled.
-      - `ShowHandSword` and `ShowSheathedSword` custom Blueprint events were created to toggle visibility/hidden-in-game between the two sword components.
-      - AnimNotify Blueprints such as `AN_ShowHandSword` / `AN_ShowSheathedSword` were being set up so draw/sheath animations can switch the visible sword at authored frames.
+      - `Sword_Sheathed` is the fake sheathed/waist sword placed inside the scabbard; it is visible when the weapon is not drawn and hidden while attacking/drawn.
+      - `Sword_InScabbard` is the scabbard component; it should stay visible in both drawn and sheathed states.
+      - All weapon/scabbard static mesh components should have collision disabled.
+      - C++ exposes `SetSceneComponentVisibleByName()` and `SetCombatWeaponDrawnForNotify()` for AnimNotify Blueprints to switch weapon visibility at authored frames.
+      - `AN_ShowSheathedSword` should call `SetCombatWeaponDrawnForNotify(false)` if the sheathed sword needs to appear before the transition montage naturally ends.
     - Add/keep `KatanaTraceStart` and `KatanaTraceEnd` scene components as children of the hand-held weapon component (`Sword_Hand` / previous `Katana`).
     - `KatanaTraceStart` should sit near the blade root/guard.
     - `KatanaTraceEnd` should sit near the blade tip.
@@ -672,8 +677,10 @@ git lfs pull
 
 9. Polish draw/sheath flow:
    - Confirm `CombatToIdleAnimation` on `BP_SideScrollingCharacter` points to `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`.
-   - Keep the initial sword state as sheathed: hand sword hidden, sheathed sword visible.
-   - Add or tune weapon visibility notifies later if the hand/sheathed sword swap needs exact frame timing.
+   - Keep the initial sword state as sheathed: `Sword_Hand` hidden, `Sword_Sheathed` visible, and `Sword_InScabbard` visible.
+   - `Sword_InScabbard` is the visible scabbard and should remain visible; `Sword_Sheathed` is the fake sword inside it and is hidden while the hand sword is drawn.
+   - Tune the `AN_ShowSheathedSword` notify position in `Idle_Combat_To_Idle_Seq` to control when the sheathed sword reappears during the return-to-idle animation.
+   - If a visibility notify needs Blueprint logic, call `SetCombatWeaponDrawnForNotify(false)` or `SetSceneComponentVisibleByName()` on `BP_SideScrollingCharacter`.
 
 10. Add attack hit feedback:
    - Add short hit stop on successful player melee hit.

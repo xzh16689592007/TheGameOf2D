@@ -423,6 +423,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetCurrentAttackRadius() const;
 
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
+	bool SetSceneComponentVisibleByName(FName ComponentName, bool bVisible, bool bPropagateToChildren = true);
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
+	void SetCombatWeaponDrawnForNotify(bool bDrawn);
+
 protected:
 
 	/** Handles advanced jump logic */
