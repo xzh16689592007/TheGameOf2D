@@ -13,7 +13,7 @@ AModengFastEnemy::AModengFastEnemy()
 	CurrentHealth = MaxHealth;
 	MoveSpeed = 320.0f;
 	AttackDamage = 5.0f;
-	AttackInterval = 0.65f;
+	AttackInterval = 0.95f;
 	InkReward = 1;
 	EnemyBodyScale = FVector(1.05f, 1.05f, 1.05f);
 	EnemyBodyColor = FLinearColor(0.72f, 0.08f, 0.05f);

@@ -10,6 +10,9 @@
 #include "Engine/World.h"
 #include "ModengExplosionEffect.h"
 #include "ModengLantern.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
+#include "Particles/ParticleSystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
 AModengExploderEnemy::AModengExploderEnemy()
@@ -30,6 +33,13 @@ AModengExploderEnemy::AModengExploderEnemy()
 	bOverrideBodyMaterialColor = false;
 	bUseSkeletalMeshVisuals = true;
 	ExplosionEffectClass = AModengExplosionEffect::StaticClass();
+	ExplosionEffectScale = 1.0f;
+
+	static ConstructorHelpers::FObjectFinder<UParticleSystem> ExplosionPackEffect(TEXT("/Game/ExplosionPack/Particles/P_Explosion3.P_Explosion3"));
+	if (ExplosionPackEffect.Succeeded())
+	{
+		ExplosionParticleSystem = ExplosionPackEffect.Object;
+	}
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SkeletonBruteMesh(TEXT("/Game/ModularCharacterSkeleton/Meshes/SK_Skeleton.SK_Skeleton"));
 	if (SkeletonBruteMesh.Succeeded())
@@ -90,30 +100,45 @@ AModengExploderEnemy::AModengExploderEnemy()
 
 void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
 
-	if (ExplosionEffectClass)
+	FVector ExplosionLocation = GetActorLocation();
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
 	{
-		FVector ExplosionLocation = GetActorLocation();
-		if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
-		{
-			ExplosionLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
-		}
+		ExplosionLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+
+	if (ExplosionParticleSystem)
+	{
+		UGameplayStatics::SpawnEmitterAtLocation(
+			GetWorld(),
+			ExplosionParticleSystem,
+			ExplosionLocation,
+			FRotator::ZeroRotator,
+			FVector(ExplosionEffectScale),
+			true);
+	}
+	else if (ExplosionEffectClass)
+	{
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		GetWorld()->SpawnActor<AModengExplosionEffect>(ExplosionEffectClass, ExplosionLocation, FRotator::ZeroRotator, SpawnParams);
+		AModengExplosionEffect* Explosion = GetWorld()->SpawnActor<AModengExplosionEffect>(ExplosionEffectClass, ExplosionLocation, FRotator::ZeroRotator, SpawnParams);
+		if (Explosion)
+		{
+			Explosion->SetActorScale3D(FVector(ExplosionEffectScale));
+		}
 	}
 
-	TargetLantern->ApplyDamageToLantern(AttackDamage);
+	ApplyDamageToCurrentTarget(AttackDamage);
 	PlayAttackAnimation();
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor::Red, TEXT("Exploder burst damaged lantern"));
+		GEngine->AddOnScreenDebugMessage(-1, 1.2f, FColor::Red, IsTargetingPlayer() ? TEXT("Exploder burst damaged player") : TEXT("Exploder burst damaged lantern"));
 	}
 
 	Die();

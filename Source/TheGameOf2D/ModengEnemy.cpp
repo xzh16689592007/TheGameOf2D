@@ -162,7 +162,7 @@ void AModengEnemy::BeginPlay()
 	ConfigureEnemyVisuals();
 	InitializeHealthBar();
 	UpdateLocomotionAnimation(false);
-	FindTargetLantern();
+	FindTarget();
 }
 
 void AModengEnemy::Tick(float DeltaSeconds)
@@ -175,18 +175,17 @@ void AModengEnemy::Tick(float DeltaSeconds)
 	}
 
 	TimeUntilRetarget -= DeltaSeconds;
-	if (!TargetLantern || TargetLantern->IsExtinguished() || TimeUntilRetarget <= 0.0f)
+	if (!IsCurrentTargetValid() || TimeUntilRetarget <= 0.0f)
 	{
-		FindTargetLantern();
+		FindTarget();
 	}
 
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
 
-	const float DistanceToTargetX = FMath::Abs(TargetLantern->GetActorLocation().X - GetActorLocation().X);
-	if (DistanceToTargetX > AttackRange)
+	if (!IsActorInAttackRange(GetCurrentTargetActor()))
 	{
 		MoveTowardTarget(DeltaSeconds);
 	}
@@ -198,12 +197,38 @@ void AModengEnemy::Tick(float DeltaSeconds)
 	}
 }
 
-void AModengEnemy::FindTargetLantern()
+void AModengEnemy::FindTarget()
 {
 	TargetLantern = nullptr;
+	TargetPlayer = nullptr;
+	TargetActor = nullptr;
 	TimeUntilRetarget = RetargetInterval;
 
 	float BestDistanceSq = TNumericLimits<float>::Max();
+	if (bCanTargetPlayer)
+	{
+		const float MaxPlayerDistanceSq = PlayerTargetAcquireRange > 0.0f
+			? FMath::Square(PlayerTargetAcquireRange)
+			: TNumericLimits<float>::Max();
+
+		for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+		{
+			ASideScrollingCharacter* Player = *It;
+			if (!Player || Player->IsPlayerDefeated())
+			{
+				continue;
+			}
+
+			const float DistanceSq = FVector::DistSquared(GetActorLocation(), Player->GetActorLocation());
+			if (DistanceSq <= MaxPlayerDistanceSq && DistanceSq < BestDistanceSq)
+			{
+				BestDistanceSq = DistanceSq;
+				TargetPlayer = Player;
+				TargetActor = Player;
+			}
+		}
+	}
+
 	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
 	{
 		AModengLantern* Lantern = *It;
@@ -216,19 +241,21 @@ void AModengEnemy::FindTargetLantern()
 		if (DistanceSq < BestDistanceSq)
 		{
 			BestDistanceSq = DistanceSq;
+			TargetPlayer = nullptr;
 			TargetLantern = Lantern;
+			TargetActor = Lantern;
 		}
 	}
 }
 
 void AModengEnemy::MoveTowardTarget(float DeltaSeconds)
 {
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
 
-	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	const float DirectionX = GetCurrentTargetDirectionX();
 	if (FMath::IsNearlyZero(DirectionX))
 	{
 		return;
@@ -242,7 +269,7 @@ void AModengEnemy::MoveTowardTarget(float DeltaSeconds)
 
 void AModengEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
@@ -257,29 +284,11 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	FaceTargetLantern();
 	PlayAttackAnimation();
 
-	bool bDamagedPlayer = false;
-	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
-	{
-		ASideScrollingCharacter* Player = *It;
-		if (!Player || Player->IsPlayerDefeated())
-		{
-			continue;
-		}
-
-		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
-		const float DistanceToPlayerZ = FMath::Abs(Player->GetActorLocation().Z - GetActorLocation().Z);
-		if (DistanceToPlayerX <= AttackRange + 25.0f && DistanceToPlayerZ <= 110.0f)
-		{
-			bDamagedPlayer = Player->ApplyDamageToPlayer(AttackDamage, this);
-			break;
-		}
-	}
-
-	TargetLantern->ApplyDamageToLantern(AttackDamage);
+	const bool bDamagedTarget = ApplyDamageToCurrentTarget(AttackDamage);
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Orange, bDamagedPlayer ? TEXT("Enemy damaged player and lantern") : TEXT("Enemy damaged lantern"));
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Orange, bDamagedTarget ? TEXT("Enemy damaged target") : TEXT("Enemy attack missed"));
 	}
 }
 
@@ -418,14 +427,93 @@ void AModengEnemy::ApplyEnemyLoadout()
 	}
 }
 
+AActor* AModengEnemy::GetCurrentTargetActor() const
+{
+	return TargetActor ? TargetActor.Get() : Cast<AActor>(TargetLantern);
+}
+
+bool AModengEnemy::IsCurrentTargetValid() const
+{
+	if (TargetPlayer)
+	{
+		return !TargetPlayer->IsPlayerDefeated();
+	}
+
+	return TargetLantern && !TargetLantern->IsExtinguished();
+}
+
+bool AModengEnemy::IsActorInAttackRange(const AActor* Actor, float ExtraRange, float PlayerHeightToleranceOverride) const
+{
+	if (!Actor)
+	{
+		return false;
+	}
+
+	const float DistanceToTargetX = FMath::Abs(Actor->GetActorLocation().X - GetActorLocation().X);
+	if (DistanceToTargetX > AttackRange + ExtraRange)
+	{
+		return false;
+	}
+
+	if (Cast<const ASideScrollingCharacter>(Actor))
+	{
+		const float HeightTolerance = PlayerHeightToleranceOverride >= 0.0f ? PlayerHeightToleranceOverride : PlayerAttackHeightTolerance;
+		const float DistanceToTargetZ = FMath::Abs(Actor->GetActorLocation().Z - GetActorLocation().Z);
+		return DistanceToTargetZ <= HeightTolerance;
+	}
+
+	return true;
+}
+
+bool AModengEnemy::ApplyDamageToCurrentTarget(float DamageAmount)
+{
+	if (!IsCurrentTargetValid() || DamageAmount <= 0.0f)
+	{
+		return false;
+	}
+
+	if (TargetPlayer)
+	{
+		return TargetPlayer->ApplyDamageToPlayer(DamageAmount, this);
+	}
+
+	if (TargetLantern)
+	{
+		TargetLantern->ApplyDamageToLantern(DamageAmount);
+		return true;
+	}
+
+	return false;
+}
+
+FVector AModengEnemy::GetCurrentTargetLocation() const
+{
+	if (const AActor* CurrentTarget = GetCurrentTargetActor())
+	{
+		return CurrentTarget->GetActorLocation();
+	}
+
+	return GetActorLocation();
+}
+
+float AModengEnemy::GetCurrentTargetDirectionX() const
+{
+	return FMath::Sign(GetCurrentTargetLocation().X - GetActorLocation().X);
+}
+
+bool AModengEnemy::IsTargetingPlayer() const
+{
+	return TargetPlayer != nullptr;
+}
+
 void AModengEnemy::FaceTargetLantern()
 {
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
 
-	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	const float DirectionX = GetCurrentTargetDirectionX();
 	if (FMath::IsNearlyZero(DirectionX))
 	{
 		return;
