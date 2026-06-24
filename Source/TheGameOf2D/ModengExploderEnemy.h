@@ -19,7 +19,11 @@ public:
 
 protected:
 	virtual void AttackTarget(float DeltaSeconds) override;
+	virtual void Die() override;
 	virtual void ApplyEnemyLoadout() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion", meta = (ClampMin = "0.0"))
+	float ExplosionDelay = 0.32f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion")
 	TSubclassOf<AModengExplosionEffect> ExplosionEffectClass;
@@ -29,4 +33,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion", meta = (ClampMin = "0.01"))
 	float ExplosionEffectScale = 1.0f;
+
+	FTimerHandle ExplosionTimer;
+	bool bExplosionPending = false;
+
+	void Explode();
 };

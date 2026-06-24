@@ -9,8 +9,10 @@
 class AModengExplosionEffect;
 class AModengBossFireField;
 class AModengMagicProjectile;
+class UNiagaraComponent;
 class UNiagaraSystem;
 class UParticleSystem;
+class UParticleSystemComponent;
 
 UCLASS()
 class THEGAMEOF2D_API AModengBossEnemy : public AModengEnemy
@@ -69,6 +71,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Ranged")
 	FVector RangedProjectileSpawnOffset = FVector(70.0f, 0.0f, 108.0f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Ranged")
+	TObjectPtr<UParticleSystem> RangedProjectileParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Ranged", meta = (ClampMin = "0.01"))
+	float RangedProjectileEffectScale = 1.15f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area")
 	TSubclassOf<AModengExplosionEffect> AreaSkillEffectClass;
 
@@ -77,6 +85,21 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.01"))
 	float AreaSkillNiagaraEffectScale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.01"))
+	float AreaSkillNiagaraEffectLifetime = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area")
+	TObjectPtr<UParticleSystem> AreaSkillChargeParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.0"))
+	float AreaSkillChargeDelay = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.01"))
+	float AreaSkillChargeEffectScale = 2.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area")
+	FVector AreaSkillChargeEffectOffset = FVector(0.0f, 0.0f, 95.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.0"))
 	float AreaSkillEverySeconds = 7.0f;
@@ -88,10 +111,10 @@ protected:
 	float AreaSkillRadius = 340.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "1"))
-	int32 AreaSkillEffectCount = 5;
+	int32 AreaSkillEffectCount = 3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.0"))
-	float AreaSkillEffectSpacing = 145.0f;
+	float AreaSkillEffectSpacing = 190.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.0"))
 	float AreaSkillEffectGroundOffset = 6.0f;
@@ -139,6 +162,7 @@ protected:
 	FTimerHandle SummonTimer;
 	FTimerHandle RangedSkillTimer;
 	FTimerHandle AreaSkillTimer;
+	FTimerHandle AreaSkillChargeTimer;
 	FTimerHandle ShieldTimer;
 	FTimerHandle HalfHealthPhaseTimer;
 
@@ -147,16 +171,20 @@ protected:
 	bool bShieldActive = false;
 	bool bHalfHealthPhaseTriggered = false;
 	bool bHalfHealthPhaseActive = false;
+	bool bAreaSkillCharging = false;
 	float HalfHealthPhaseElapsed = 0.0f;
 	float SavedMoveSpeed = 0.0f;
 	UPROPERTY(Transient)
 	TObjectPtr<AModengBossFireField> ActiveFireField;
+	TWeakObjectPtr<UParticleSystemComponent> ActiveAreaSkillChargeEffect;
+	TArray<TWeakObjectPtr<UNiagaraComponent>> ActiveAreaSkillNiagaraComponents;
 
 	void ApplyBossLoadout();
 	void ApplyScytheDamage();
 	void SummonMinions();
 	void CastRangedSkill();
 	void CastAreaSkill();
+	void ExecuteAreaSkill();
 	void ActivateDamageShield();
 	void DeactivateDamageShield();
 	void StartHalfHealthPhase();
@@ -165,5 +193,9 @@ protected:
 	void ResumeBossTimers();
 	void ApplyFireFieldDamage(float DeltaSeconds);
 	void ApplyFireFieldFinalExplosion();
+	void ClearAreaSkillChargeEffect();
+	void ClearActiveAreaSkillNiagaraEffects();
+	FVector GetAreaSkillEffectLocation() const;
+	USceneComponent* GetAreaSkillChargeAttachComponent() const;
 	FVector GetGroundEffectLocation() const;
 };

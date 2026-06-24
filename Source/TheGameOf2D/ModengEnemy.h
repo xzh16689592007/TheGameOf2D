@@ -66,6 +66,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Attack", meta = (ClampMin = "0.1"))
 	float AttackInterval = 1.35f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
+	float AttackDamageDelay = 0.28f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Targeting", meta = (ClampMin = "0.0"))
 	float RetargetInterval = 0.5f;
 
@@ -197,12 +200,14 @@ protected:
 
 	float TimeUntilNextAttack = 0.0f;
 	float TimeUntilRetarget = 0.0f;
+	FTimerHandle AttackDamageTimer;
 	FTimerHandle HitFlashTimer;
 	FTimerHandle HealthBarHideTimer;
 	FTimerHandle ResumeAnimationTimer;
 	FTimerHandle DeathDestroyTimer;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequenceBase> CurrentLoopingAnimation = nullptr;
+	TWeakObjectPtr<AActor> PendingAttackTarget;
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USkeletalMeshComponent>> EnemyMeshPartComponents;
 	bool bIsDead = false;
@@ -218,6 +223,7 @@ protected:
 	bool IsCurrentTargetValid() const;
 	bool IsActorInAttackRange(const AActor* Actor, float ExtraRange = 0.0f, float PlayerHeightToleranceOverride = -1.0f) const;
 	bool ApplyDamageToCurrentTarget(float DamageAmount);
+	void ApplyDelayedAttackDamage();
 	FVector GetCurrentTargetLocation() const;
 	float GetCurrentTargetDirectionX() const;
 	bool IsTargetingPlayer() const;

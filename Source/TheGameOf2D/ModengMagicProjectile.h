@@ -8,6 +8,8 @@
 
 class AModengLantern;
 class ASideScrollingCharacter;
+class UParticleSystem;
+class UParticleSystemComponent;
 class UPointLightComponent;
 class USphereComponent;
 class UStaticMeshComponent;
@@ -22,7 +24,7 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	void InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius);
+	void InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius, UParticleSystem* InProjectileEffect = nullptr, const FVector& InProjectileEffectScale = FVector::OneVector);
 
 protected:
 	virtual void BeginPlay() override;
@@ -32,6 +34,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
 	UStaticMeshComponent* ProjectileMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
+	UParticleSystemComponent* ProjectileEffectComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
 	UPointLightComponent* ProjectileLight;
@@ -49,5 +54,6 @@ protected:
 	float ProjectileSpeed = 520.0f;
 	float ImpactRadius = 35.0f;
 
+	void ApplyProjectileEffect(UParticleSystem* InProjectileEffect, const FVector& InProjectileEffectScale);
 	void ImpactTarget();
 };

@@ -13,6 +13,7 @@
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "Particles/ParticleSystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 AModengExploderEnemy::AModengExploderEnemy()
@@ -100,11 +101,40 @@ AModengExploderEnemy::AModengExploderEnemy()
 
 void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!IsCurrentTargetValid())
+	if (!IsCurrentTargetValid() || bExplosionPending)
 	{
 		return;
 	}
 
+	bExplosionPending = true;
+	FaceTargetLantern();
+	PlayAttackAnimation();
+	GetWorld()->GetTimerManager().ClearTimer(ExplosionTimer);
+	if (ExplosionDelay > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(ExplosionTimer, this, &AModengExploderEnemy::Explode, ExplosionDelay, false);
+	}
+	else
+	{
+		Explode();
+	}
+}
+
+void AModengExploderEnemy::Die()
+{
+	GetWorld()->GetTimerManager().ClearTimer(ExplosionTimer);
+	bExplosionPending = false;
+	Super::Die();
+}
+
+void AModengExploderEnemy::Explode()
+{
+	if (!bExplosionPending || IsDead())
+	{
+		return;
+	}
+
+	bExplosionPending = false;
 	FVector ExplosionLocation = GetActorLocation();
 	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
 	{
@@ -133,8 +163,10 @@ void AModengExploderEnemy::AttackTarget(float DeltaSeconds)
 		}
 	}
 
-	ApplyDamageToCurrentTarget(AttackDamage);
-	PlayAttackAnimation();
+	if (IsCurrentTargetValid() && IsActorInAttackRange(GetCurrentTargetActor()))
+	{
+		ApplyDamageToCurrentTarget(AttackDamage);
+	}
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{

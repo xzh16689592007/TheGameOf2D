@@ -7,6 +7,7 @@
 #include "ModengRangedEnemy.generated.h"
 
 class AModengMagicProjectile;
+class UParticleSystem;
 
 UCLASS()
 class THEGAMEOF2D_API AModengRangedEnemy : public AModengEnemy
@@ -36,6 +37,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Ranged")
 	FVector ProjectileSpawnOffset = FVector(35.0f, 0.0f, 92.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Ranged")
+	TObjectPtr<UParticleSystem> ProjectileParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Ranged", meta = (ClampMin = "0.01"))
+	float ProjectileEffectScale = 0.85f;
 
 	FTimerHandle ProjectileFireTimer;
 

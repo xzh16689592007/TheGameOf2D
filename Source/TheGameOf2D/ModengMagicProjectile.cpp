@@ -9,6 +9,8 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "ModengLantern.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -26,6 +28,8 @@ AModengMagicProjectile::AModengMagicProjectile()
 	ProjectileMesh->SetupAttachment(RootComponent);
 	ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ProjectileMesh->SetRelativeScale3D(FVector(0.18f, 0.18f, 0.18f));
+	ProjectileMesh->SetVisibility(false);
+	ProjectileMesh->SetHiddenInGame(true);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (SphereMesh.Succeeded())
@@ -38,6 +42,11 @@ AModengMagicProjectile::AModengMagicProjectile()
 	{
 		ProjectileMesh->SetMaterial(0, BasicMaterial.Object);
 	}
+
+	ProjectileEffectComponent = CreateDefaultSubobject<UParticleSystemComponent>(TEXT("ProjectileEffect"));
+	ProjectileEffectComponent->SetupAttachment(RootComponent);
+	ProjectileEffectComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ProjectileEffectComponent->bAutoActivate = false;
 
 	ProjectileLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ProjectileLight"));
 	ProjectileLight->SetupAttachment(RootComponent);
@@ -102,13 +111,36 @@ void AModengMagicProjectile::Tick(float DeltaSeconds)
 	SetActorRotation(MoveDirection.Rotation());
 }
 
-void AModengMagicProjectile::InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius)
+void AModengMagicProjectile::InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius, UParticleSystem* InProjectileEffect, const FVector& InProjectileEffectScale)
 {
 	TargetActor = InTargetActor;
 	DamageSourceActor = GetOwner() ? GetOwner() : this;
 	Damage = FMath::Max(0.0f, InDamage);
 	ProjectileSpeed = FMath::Max(1.0f, InProjectileSpeed);
 	ImpactRadius = FMath::Max(1.0f, InImpactRadius);
+	ApplyProjectileEffect(InProjectileEffect, InProjectileEffectScale);
+}
+
+void AModengMagicProjectile::ApplyProjectileEffect(UParticleSystem* InProjectileEffect, const FVector& InProjectileEffectScale)
+{
+	if (!ProjectileEffectComponent)
+	{
+		return;
+	}
+
+	if (InProjectileEffect)
+	{
+		ProjectileEffectComponent->SetTemplate(InProjectileEffect);
+		ProjectileEffectComponent->SetRelativeScale3D(InProjectileEffectScale);
+		ProjectileEffectComponent->ActivateSystem(true);
+		ProjectileMesh->SetVisibility(false);
+		ProjectileMesh->SetHiddenInGame(true);
+		return;
+	}
+
+	ProjectileEffectComponent->DeactivateSystem();
+	ProjectileMesh->SetVisibility(true);
+	ProjectileMesh->SetHiddenInGame(false);
 }
 
 void AModengMagicProjectile::ImpactTarget()

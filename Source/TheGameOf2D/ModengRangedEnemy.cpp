@@ -8,8 +8,10 @@
 #include "Engine/World.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
+#include "Particles/ParticleSystem.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 AModengRangedEnemy::AModengRangedEnemy()
 {
@@ -32,6 +34,12 @@ AModengRangedEnemy::AModengRangedEnemy()
 	bOverrideBodyMaterialColor = false;
 	bUseSkeletalMeshVisuals = true;
 	ProjectileClass = AModengMagicProjectile::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<UParticleSystem> RangedProjectileEffect(TEXT("/Game/PewPewPack/ParticleSystems/Blaster/Par_Blaster_2.Par_Blaster_2"));
+	if (RangedProjectileEffect.Succeeded())
+	{
+		ProjectileParticleSystem = RangedProjectileEffect.Object;
+	}
 
 	ApplyWizardLoadout();
 }
@@ -165,6 +173,6 @@ void AModengRangedEnemy::FireProjectile()
 	AModengMagicProjectile* Projectile = GetWorld()->SpawnActor<AModengMagicProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
 	if (Projectile)
 	{
-		Projectile->InitializeProjectile(CurrentTarget, AttackDamage, ProjectileSpeed, ProjectileImpactRadius);
+		Projectile->InitializeProjectile(CurrentTarget, AttackDamage, ProjectileSpeed, ProjectileImpactRadius, ProjectileParticleSystem, FVector(ProjectileEffectScale));
 	}
 }

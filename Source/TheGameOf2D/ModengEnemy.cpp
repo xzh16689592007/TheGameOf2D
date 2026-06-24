@@ -283,6 +283,32 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	TimeUntilNextAttack = AttackInterval;
 	FaceTargetLantern();
 	PlayAttackAnimation();
+	PendingAttackTarget = GetCurrentTargetActor();
+	GetWorld()->GetTimerManager().ClearTimer(AttackDamageTimer);
+
+	if (AttackDamageDelay > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(AttackDamageTimer, this, &AModengEnemy::ApplyDelayedAttackDamage, AttackDamageDelay, false);
+	}
+	else
+	{
+		ApplyDelayedAttackDamage();
+	}
+}
+
+void AModengEnemy::ApplyDelayedAttackDamage()
+{
+	AActor* AttackTarget = PendingAttackTarget.Get();
+	PendingAttackTarget.Reset();
+	if (bIsDead || !AttackTarget || !IsActorInAttackRange(AttackTarget))
+	{
+		return;
+	}
+
+	if (TargetActor.Get() != AttackTarget)
+	{
+		return;
+	}
 
 	const bool bDamagedTarget = ApplyDamageToCurrentTarget(AttackDamage);
 
@@ -335,6 +361,8 @@ bool AModengEnemy::IsDead() const
 void AModengEnemy::Die()
 {
 	bIsDead = true;
+	GetWorld()->GetTimerManager().ClearTimer(AttackDamageTimer);
+	PendingAttackTarget.Reset();
 	GetWorld()->GetTimerManager().ClearTimer(HitFlashTimer);
 	GetWorld()->GetTimerManager().ClearTimer(HealthBarHideTimer);
 	GetWorld()->GetTimerManager().ClearTimer(ResumeAnimationTimer);

@@ -17,10 +17,12 @@
 #include "ModengFastEnemy.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
+#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
@@ -70,6 +72,18 @@ AModengBossEnemy::AModengBossEnemy()
 	if (AreaSkillNiagaraEffect.Succeeded())
 	{
 		AreaSkillNiagaraSystem = AreaSkillNiagaraEffect.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UParticleSystem> AreaSkillChargeEffect(TEXT("/Game/FireEnergyVFX/Particles/P_PulseBeam.P_PulseBeam"));
+	if (AreaSkillChargeEffect.Succeeded())
+	{
+		AreaSkillChargeParticleSystem = AreaSkillChargeEffect.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UParticleSystem> BossProjectileEffect(TEXT("/Game/PewPewPack/ParticleSystems/Helix/Par_Helix_03.Par_Helix_03"));
+	if (BossProjectileEffect.Succeeded())
+	{
+		RangedProjectileParticleSystem = BossProjectileEffect.Object;
 	}
 
 	ApplyBossLoadout();
@@ -162,7 +176,7 @@ void AModengBossEnemy::MoveTowardTarget(float DeltaSeconds)
 
 void AModengBossEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!IsCurrentTargetValid() || bHalfHealthPhaseActive)
+	if (!IsCurrentTargetValid() || bHalfHealthPhaseActive || bAreaSkillCharging)
 	{
 		return;
 	}
@@ -194,8 +208,12 @@ void AModengBossEnemy::Die()
 	GetWorld()->GetTimerManager().ClearTimer(SummonTimer);
 	GetWorld()->GetTimerManager().ClearTimer(RangedSkillTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AreaSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AreaSkillChargeTimer);
 	GetWorld()->GetTimerManager().ClearTimer(ShieldTimer);
 	GetWorld()->GetTimerManager().ClearTimer(HalfHealthPhaseTimer);
+	bAreaSkillCharging = false;
+	ClearAreaSkillChargeEffect();
+	ClearActiveAreaSkillNiagaraEffects();
 	if (ActiveFireField)
 	{
 		ActiveFireField->Destroy();
@@ -250,7 +268,7 @@ void AModengBossEnemy::ApplyBossLoadout()
 
 void AModengBossEnemy::ApplyScytheDamage()
 {
-	if (!IsCurrentTargetValid() || IsDead())
+	if (!IsCurrentTargetValid() || IsDead() || bAreaSkillCharging)
 	{
 		return;
 	}
@@ -323,14 +341,14 @@ void AModengBossEnemy::CastRangedSkill()
 		AModengMagicProjectile* Projectile = GetWorld()->SpawnActor<AModengMagicProjectile>(BossProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
 		if (Projectile)
 		{
-			Projectile->InitializeProjectile(CurrentTarget, RangedProjectileDamage, RangedProjectileSpeed, RangedProjectileImpactRadius);
+			Projectile->InitializeProjectile(CurrentTarget, RangedProjectileDamage, RangedProjectileSpeed, RangedProjectileImpactRadius, RangedProjectileParticleSystem, FVector(RangedProjectileEffectScale));
 		}
 	}
 }
 
 void AModengBossEnemy::CastAreaSkill()
 {
-	if (!IsCurrentTargetValid() || IsDead() || bHalfHealthPhaseActive)
+	if (!IsCurrentTargetValid() || IsDead() || bHalfHealthPhaseActive || bAreaSkillCharging)
 	{
 		return;
 	}
@@ -338,12 +356,52 @@ void AModengBossEnemy::CastAreaSkill()
 	FaceTargetLantern();
 	PlayAttackAnimation();
 
-	FVector EffectLocation = GetActorLocation();
-	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	bAreaSkillCharging = true;
+	GetWorld()->GetTimerManager().ClearTimer(ScytheDamageTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AreaSkillChargeTimer);
+	ClearAreaSkillChargeEffect();
+
+	if (AreaSkillChargeParticleSystem)
 	{
-		EffectLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+		ActiveAreaSkillChargeEffect = UGameplayStatics::SpawnEmitterAttached(
+			AreaSkillChargeParticleSystem,
+			GetAreaSkillChargeAttachComponent(),
+			NAME_None,
+			AreaSkillChargeEffectOffset,
+			FRotator::ZeroRotator,
+			FVector(AreaSkillChargeEffectScale),
+			EAttachLocation::KeepRelativeOffset,
+			false,
+			EPSCPoolMethod::None,
+			true);
 	}
-	EffectLocation.Z += AreaSkillEffectGroundOffset;
+
+	if (AreaSkillChargeDelay <= 0.0f)
+	{
+		ExecuteAreaSkill();
+		return;
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(AreaSkillChargeTimer, this, &AModengBossEnemy::ExecuteAreaSkill, AreaSkillChargeDelay, false);
+}
+
+void AModengBossEnemy::ExecuteAreaSkill()
+{
+	bAreaSkillCharging = false;
+	ClearAreaSkillChargeEffect();
+
+	if (!IsCurrentTargetValid() || IsDead() || bHalfHealthPhaseActive)
+	{
+		return;
+	}
+
+	FaceTargetLantern();
+
+	const FVector EffectLocation = GetAreaSkillEffectLocation();
+	ActiveAreaSkillNiagaraComponents.RemoveAllSwap([](const TWeakObjectPtr<UNiagaraComponent>& WeakEffectComponent)
+	{
+		return !WeakEffectComponent.IsValid();
+	});
 
 	if (AreaSkillNiagaraSystem)
 	{
@@ -354,7 +412,7 @@ void AModengBossEnemy::CastAreaSkill()
 			FVector SpawnLocation = EffectLocation;
 			SpawnLocation.X += (static_cast<float>(EffectIndex) - CenterOffset) * AreaSkillEffectSpacing;
 
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			UNiagaraComponent* SpawnedEffect = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				GetWorld(),
 				AreaSkillNiagaraSystem,
 				SpawnLocation,
@@ -362,6 +420,26 @@ void AModengBossEnemy::CastAreaSkill()
 				FVector(AreaSkillNiagaraEffectScale),
 				true,
 				true);
+			if (SpawnedEffect)
+			{
+				SpawnedEffect->SetAutoDestroy(true);
+				ActiveAreaSkillNiagaraComponents.Add(SpawnedEffect);
+
+				TWeakObjectPtr<UNiagaraComponent> WeakSpawnedEffect = SpawnedEffect;
+				FTimerHandle DestroyEffectTimer;
+				GetWorld()->GetTimerManager().SetTimer(
+					DestroyEffectTimer,
+					FTimerDelegate::CreateLambda([WeakSpawnedEffect]()
+					{
+						if (UNiagaraComponent* EffectComponent = WeakSpawnedEffect.Get())
+						{
+							EffectComponent->Deactivate();
+							EffectComponent->DestroyComponent();
+						}
+					}),
+					AreaSkillNiagaraEffectLifetime,
+					false);
+			}
 		}
 	}
 	else if (AreaSkillEffectClass)
@@ -545,7 +623,11 @@ void AModengBossEnemy::PauseBossTimers()
 	GetWorld()->GetTimerManager().ClearTimer(SummonTimer);
 	GetWorld()->GetTimerManager().ClearTimer(RangedSkillTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AreaSkillTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AreaSkillChargeTimer);
 	GetWorld()->GetTimerManager().ClearTimer(ShieldTimer);
+	bAreaSkillCharging = false;
+	ClearAreaSkillChargeEffect();
+	ClearActiveAreaSkillNiagaraEffects();
 }
 
 void AModengBossEnemy::ResumeBossTimers()
@@ -663,6 +745,49 @@ void AModengBossEnemy::ApplyFireFieldFinalExplosion()
 			Player->ApplyDamageToPlayer(FireFieldFinalExplosionDamage, this);
 		}
 	}
+}
+
+void AModengBossEnemy::ClearActiveAreaSkillNiagaraEffects()
+{
+	for (TWeakObjectPtr<UNiagaraComponent>& WeakEffectComponent : ActiveAreaSkillNiagaraComponents)
+	{
+		if (UNiagaraComponent* EffectComponent = WeakEffectComponent.Get())
+		{
+			EffectComponent->Deactivate();
+			EffectComponent->DestroyComponent();
+		}
+	}
+	ActiveAreaSkillNiagaraComponents.Empty();
+}
+
+void AModengBossEnemy::ClearAreaSkillChargeEffect()
+{
+	if (UParticleSystemComponent* ChargeEffect = ActiveAreaSkillChargeEffect.Get())
+	{
+		ChargeEffect->DeactivateSystem();
+		ChargeEffect->DestroyComponent();
+	}
+	ActiveAreaSkillChargeEffect.Reset();
+}
+
+FVector AModengBossEnemy::GetAreaSkillEffectLocation() const
+{
+	FVector EffectLocation = GetActorLocation();
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		EffectLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+	EffectLocation.Z += AreaSkillEffectGroundOffset;
+	return EffectLocation;
+}
+
+USceneComponent* AModengBossEnemy::GetAreaSkillChargeAttachComponent() const
+{
+	if (USceneComponent* MeshComponent = GetMesh())
+	{
+		return MeshComponent;
+	}
+	return GetRootComponent();
 }
 
 FVector AModengBossEnemy::GetGroundEffectLocation() const
