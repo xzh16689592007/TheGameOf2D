@@ -100,6 +100,12 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 		RollMontage = RollMontageAsset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> HitReactionAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Hit/Hit_F_Seq.Hit_F_Seq"));
+	if (HitReactionAsset.Succeeded())
+	{
+		HitReactionAnimation = HitReactionAsset.Object;
+	}
+
 	// configure the collision capsule
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
 
@@ -138,6 +144,8 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 void ASideScrollingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
 
 	bUseControllerRotationYaw = false;
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
@@ -183,6 +191,8 @@ void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
+	GetWorld()->GetTimerManager().ClearTimer(HitInvulnerabilityTimer);
+	GetWorld()->GetTimerManager().ClearTimer(HitReactionTimer);
 }
 
 void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
@@ -285,6 +295,12 @@ void ASideScrollingCharacter::DropReleased(const FInputActionValue& Value)
 
 void ASideScrollingCharacter::DoMove(float Forward)
 {
+	if (bHitReactionInProgress || bPlayerDefeated)
+	{
+		ActionValueY = 0.0f;
+		return;
+	}
+
 	if (bRollInProgress)
 	{
 		RollMoveQueuedValue = Forward;
@@ -357,6 +373,11 @@ void ASideScrollingCharacter::DoDrop(float Value)
 
 void ASideScrollingCharacter::DoJumpStart()
 {
+	if (bHitReactionInProgress || bPlayerDefeated)
+	{
+		return;
+	}
+
 	if (bRollInProgress)
 	{
 		bRollJumpQueued = true;
@@ -383,6 +404,11 @@ void ASideScrollingCharacter::DoJumpEnd()
 
 void ASideScrollingCharacter::DoInteract()
 {
+	if (bHitReactionInProgress || bPlayerDefeated)
+	{
+		return;
+	}
+
 	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Cyan, TEXT("Interact pressed"));
@@ -449,6 +475,11 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoAttack()
 {
+	if (bHitReactionInProgress || bPlayerDefeated)
+	{
+		return;
+	}
+
 	if (bRollInProgress)
 	{
 		const bool bAirRollInProgress = bRollPausedFalling || (GetCharacterMovement() && GetCharacterMovement()->IsFalling());
@@ -526,6 +557,11 @@ void ASideScrollingCharacter::DoAttack()
 
 void ASideScrollingCharacter::DoRoll()
 {
+	if (bHitReactionInProgress || bPlayerDefeated)
+	{
+		return;
+	}
+
 	if (bRollInProgress || bAttackAnimationInProgress || (!RollMontage && !RollAnimation))
 	{
 		return;
@@ -1523,6 +1559,162 @@ void ASideScrollingCharacter::SetCombatWeaponDrawnForNotify(bool bDrawn)
 	SetCombatWeaponDrawn(bDrawn);
 }
 
+bool ASideScrollingCharacter::PlayHitReaction(AActor* DamageSource)
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
+	if (!CharacterMesh || !AnimInstance || !HitReactionAnimation)
+	{
+		return false;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(HitReactionTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
+
+	if (bAttackHitWindowActive)
+	{
+		EndAttackHitWindow();
+	}
+
+	if (ActiveGroundAttackMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveGroundAttackMontage);
+		ActiveGroundAttackMontage = nullptr;
+	}
+
+	if (ActiveAirToFloorAttackMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveAirToFloorAttackMontage);
+		ActiveAirToFloorAttackMontage = nullptr;
+	}
+
+	if (ActiveCombatTransitionMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveCombatTransitionMontage);
+		ActiveCombatTransitionMontage = nullptr;
+	}
+
+	if (ActiveRollMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveRollMontage);
+		ActiveRollMontage = nullptr;
+	}
+
+	if (ActiveHitReactionMontage)
+	{
+		AnimInstance->Montage_Stop(0.02f, ActiveHitReactionMontage);
+		ActiveHitReactionMontage = nullptr;
+	}
+
+	if (!bAttackAnimationInProgress)
+	{
+		MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	}
+
+	RestoreRollFallingMovement();
+	bHitReactionInProgress = true;
+	bAttackAnimationInProgress = true;
+	bAttackHitPending = false;
+	bComboInputQueued = false;
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
+	bAirToFloorAttackInProgress = false;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	RollMoveQueuedValue = 0.0f;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::HitReact;
+	SetCombatWeaponDrawn(false);
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+		if (HitReactionKnockbackImpulse > 0.0f && DamageSource)
+		{
+			const float AwayFromDamageX = FMath::Sign(GetActorLocation().X - DamageSource->GetActorLocation().X);
+			const float SafeAwayFromDamageX = FMath::IsNearlyZero(AwayFromDamageX) ? -LastFacingX : AwayFromDamageX;
+			MovementComponent->AddImpulse(FVector(SafeAwayFromDamageX * HitReactionKnockbackImpulse, 0.0f, 0.0f), true);
+		}
+	}
+
+	const float SafePlayRate = FMath::Max(HitReactionPlayRate, 0.1f);
+	ActiveHitReactionMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+		HitReactionAnimation.Get(),
+		HitReactionSlotName,
+		FMath::Max(HitReactionBlendInTime, 0.0f),
+		FMath::Max(HitReactionBlendOutTime, 0.0f),
+		SafePlayRate);
+
+	const float LockDuration = HitReactionLockDuration > 0.0f
+		? HitReactionLockDuration
+		: HitReactionAnimation->GetPlayLength() / SafePlayRate;
+
+	if (ActiveHitReactionMontage)
+	{
+		FOnMontageEnded EndDelegate;
+		EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnHitReactionMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(EndDelegate, ActiveHitReactionMontage);
+	}
+
+	if (LockDuration > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(HitReactionTimer, this, &ASideScrollingCharacter::FinishHitReaction, LockDuration, false);
+	}
+	else
+	{
+		FinishHitReaction();
+	}
+
+	return true;
+}
+
+void ASideScrollingCharacter::FinishHitReaction()
+{
+	GetWorld()->GetTimerManager().ClearTimer(HitReactionTimer);
+	if (!bHitReactionInProgress)
+	{
+		return;
+	}
+
+	bHitReactionInProgress = false;
+	UAnimMontage* MontageToStop = ActiveHitReactionMontage;
+	ActiveHitReactionMontage = nullptr;
+	if (MontageToStop)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+		{
+			AnimInstance->Montage_Stop(FMath::Max(HitReactionBlendOutTime, 0.0f), MontageToStop);
+		}
+	}
+
+	if (!bPlayerDefeated)
+	{
+		RestorePlayerAnimationBlueprint();
+		ResetAttackCombo();
+	}
+}
+
+void ASideScrollingCharacter::OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveHitReactionMontage)
+	{
+		return;
+	}
+
+	FinishHitReaction();
+}
+
+void ASideScrollingCharacter::ClearDamageInvulnerability()
+{
+	bDamageInvulnerable = false;
+}
+
 void ASideScrollingCharacter::BeginRollInvincible()
 {
 	if (bRollInProgress)
@@ -1784,6 +1976,7 @@ void ASideScrollingCharacter::ResetAttackCombo()
 	RollMoveQueuedValue = 0.0f;
 	ActiveGroundAttackMontage = nullptr;
 	ActiveAirToFloorAttackMontage = nullptr;
+	ActiveHitReactionMontage = nullptr;
 	ActiveRollMontage = nullptr;
 }
 
@@ -1848,6 +2041,65 @@ float ASideScrollingCharacter::GetCurrentAttackRange() const
 float ASideScrollingCharacter::GetCurrentAttackRadius() const
 {
 	return AttackRadius + RadiusGainPerWeaponLevel * (WeaponLevel - 1);
+}
+
+bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource)
+{
+	if (DamageAmount <= 0.0f || bPlayerDefeated)
+	{
+		return false;
+	}
+
+	if (bDamageInvulnerable || (bIgnoreDamageWhileRolling && bRollInvincible))
+	{
+		if (bShowGameplayDebugMessages && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.8f, FColor::Cyan, TEXT("Player avoided damage"));
+		}
+		return false;
+	}
+
+	CurrentHealth = FMath::Clamp(CurrentHealth - DamageAmount, 0.0f, MaxHealth);
+	bDamageInvulnerable = true;
+	GetWorld()->GetTimerManager().ClearTimer(HitInvulnerabilityTimer);
+	GetWorld()->GetTimerManager().SetTimer(HitInvulnerabilityTimer, this, &ASideScrollingCharacter::ClearDamageInvulnerability, HitInvulnerabilityDuration, false);
+
+	if (CurrentHealth <= 0.0f)
+	{
+		bPlayerDefeated = true;
+		InterruptAttackAnimation();
+		PlayHitReaction(DamageSource);
+		if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+		{
+			MovementComponent->DisableMovement();
+		}
+	}
+	else
+	{
+		PlayHitReaction(DamageSource);
+	}
+
+	if (bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Red, FString::Printf(TEXT("Player HP: %.0f / %.0f"), CurrentHealth, MaxHealth));
+	}
+
+	return true;
+}
+
+float ASideScrollingCharacter::GetHealthPercent() const
+{
+	if (MaxHealth <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	return CurrentHealth / MaxHealth;
+}
+
+bool ASideScrollingCharacter::IsPlayerDefeated() const
+{
+	return bPlayerDefeated;
 }
 
 void ASideScrollingCharacter::TryUpgradeWeapon()

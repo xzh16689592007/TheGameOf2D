@@ -256,11 +256,30 @@ void AModengEnemy::AttackTarget(float DeltaSeconds)
 	TimeUntilNextAttack = AttackInterval;
 	FaceTargetLantern();
 	PlayAttackAnimation();
+
+	bool bDamagedPlayer = false;
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		ASideScrollingCharacter* Player = *It;
+		if (!Player || Player->IsPlayerDefeated())
+		{
+			continue;
+		}
+
+		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
+		const float DistanceToPlayerZ = FMath::Abs(Player->GetActorLocation().Z - GetActorLocation().Z);
+		if (DistanceToPlayerX <= AttackRange + 25.0f && DistanceToPlayerZ <= 110.0f)
+		{
+			bDamagedPlayer = Player->ApplyDamageToPlayer(AttackDamage, this);
+			break;
+		}
+	}
+
 	TargetLantern->ApplyDamageToLantern(AttackDamage);
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Orange, TEXT("Enemy damaged lantern"));
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Orange, bDamagedPlayer ? TEXT("Enemy damaged player and lantern") : TEXT("Enemy damaged lantern"));
 	}
 }
 

@@ -21,6 +21,7 @@ enum class ESideScrollingCombatAnimationPhase : uint8
 	None,
 	Attacking,
 	Sheathing,
+	HitReact,
 	AirToFloorStart,
 	AirToFloorLoop,
 	AirToFloorEnd
@@ -218,6 +219,39 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
 	FName WeaponTraceEndComponentName = TEXT("KatanaTraceEnd");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health", meta = (ClampMin = "1.0"))
+	float MaxHealth = 100.0f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Side Scrolling|Health")
+	float CurrentHealth = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health", meta = (ClampMin = "0.0"))
+	float HitInvulnerabilityDuration = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health")
+	bool bIgnoreDamageWhileRolling = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit")
+	TObjectPtr<UAnimSequenceBase> HitReactionAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit")
+	FName HitReactionSlotName = TEXT("GroundAttackSlot");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.1"))
+	float HitReactionPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.0"))
+	float HitReactionBlendInTime = 0.03f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.0"))
+	float HitReactionBlendOutTime = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.0"))
+	float HitReactionLockDuration = 0.28f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.0"))
+	float HitReactionKnockbackImpulse = 380.0f;
+
 	/** Extra damage gained for each weapon level after level 1 */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
 	float DamageGainPerWeaponLevel = 10.0f;
@@ -282,6 +316,8 @@ protected:
 	FTimerHandle AttackHitTimer;
 	FTimerHandle AttackHitWindowStartTimer;
 	FTimerHandle AttackHitWindowEndTimer;
+	FTimerHandle HitInvulnerabilityTimer;
+	FTimerHandle HitReactionTimer;
 
 	FTransform MeshTransformBeforeAttackAnimation;
 	FVector PreviousWeaponTraceStart = FVector::ZeroVector;
@@ -315,6 +351,7 @@ protected:
 	UAnimMontage* ActiveGroundAttackMontage = nullptr;
 	UAnimMontage* ActiveAirToFloorAttackMontage = nullptr;
 	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
+	UAnimMontage* ActiveHitReactionMontage = nullptr;
 	UAnimMontage* ActiveRollMontage = nullptr;
 
 	/** Last captured horizontal movement input value */
@@ -335,6 +372,9 @@ protected:
 	bool bMovingHorizontally = false;
 
 	bool bAttackAnimationInProgress = false;
+	bool bHitReactionInProgress = false;
+	bool bDamageInvulnerable = false;
+	bool bPlayerDefeated = false;
 
 public:
 	
@@ -423,6 +463,15 @@ public:
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetCurrentAttackRadius() const;
 
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
+	bool ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource = nullptr);
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
+	float GetHealthPercent() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
+	bool IsPlayerDefeated() const;
+
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
 	bool SetSceneComponentVisibleByName(FName ComponentName, bool bVisible, bool bPropagateToChildren = true);
 
@@ -459,6 +508,10 @@ protected:
 	void FinishCombatTransitionState();
 	void OnCombatTransitionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void SetCombatWeaponDrawn(bool bDrawn);
+	bool PlayHitReaction(AActor* DamageSource);
+	void FinishHitReaction();
+	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void ClearDamageInvulnerability();
 	void OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void StopActiveRollMontage(float BlendOutTime);
 	void TryConsumeRollQueuedInput();

@@ -16,6 +16,7 @@
 #include "ModengFastEnemy.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "TimerManager.h"
 
 AModengBossEnemy::AModengBossEnemy()
@@ -240,6 +241,23 @@ void AModengBossEnemy::ApplyScytheDamage()
 	if (DistanceToTargetX <= AttackRange + 35.0f)
 	{
 		TargetLantern->ApplyDamageToLantern(AttackDamage);
+	}
+
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		ASideScrollingCharacter* Player = *It;
+		if (!Player || Player->IsPlayerDefeated())
+		{
+			continue;
+		}
+
+		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
+		const float DistanceToPlayerZ = FMath::Abs(Player->GetActorLocation().Z - GetActorLocation().Z);
+		if (DistanceToPlayerX <= AttackRange + 35.0f && DistanceToPlayerZ <= 140.0f)
+		{
+			Player->ApplyDamageToPlayer(AttackDamage, this);
+			break;
+		}
 	}
 }
 
@@ -535,6 +553,21 @@ void AModengBossEnemy::ApplyFireFieldDamage(float DeltaSeconds)
 			Lantern->ApplyDamageToLantern(FireFieldDamagePerSecond * DeltaSeconds);
 		}
 	}
+
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		ASideScrollingCharacter* Player = *It;
+		if (!Player || Player->IsPlayerDefeated())
+		{
+			continue;
+		}
+
+		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToPlayerX <= CurrentRadius)
+		{
+			Player->ApplyDamageToPlayer(FireFieldDamagePerSecond * DeltaSeconds, this);
+		}
+	}
 }
 
 void AModengBossEnemy::ApplyFireFieldFinalExplosion()
@@ -566,6 +599,21 @@ void AModengBossEnemy::ApplyFireFieldFinalExplosion()
 		if (DistanceToLanternX <= FireFieldFinalRadius)
 		{
 			Lantern->ApplyDamageToLantern(FireFieldFinalExplosionDamage);
+		}
+	}
+
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		ASideScrollingCharacter* Player = *It;
+		if (!Player || Player->IsPlayerDefeated())
+		{
+			continue;
+		}
+
+		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToPlayerX <= FireFieldFinalRadius)
+		{
+			Player->ApplyDamageToPlayer(FireFieldFinalExplosionDamage, this);
 		}
 	}
 }

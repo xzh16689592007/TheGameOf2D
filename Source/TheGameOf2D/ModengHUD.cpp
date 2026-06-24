@@ -64,7 +64,7 @@ void AModengHUD::DrawHUD()
 		Player = Cast<ASideScrollingCharacter>(GetOwningPlayerController()->GetPawn());
 	}
 
-	FCanvasTileItem Panel(FVector2D(PanelX - 12.0f, PanelY - 12.0f), FVector2D(330.0f, 170.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
+	FCanvasTileItem Panel(FVector2D(PanelX - 12.0f, PanelY - 12.0f), FVector2D(330.0f, 196.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
 	Panel.BlendMode = SE_BLEND_Translucent;
 	Canvas->DrawItem(Panel);
 
@@ -88,11 +88,13 @@ void AModengHUD::DrawHUD()
 	{
 		DrawStatusLine(FString::Printf(TEXT("Weapon Lv.%d  Ink: %d"), Player->GetWeaponLevel(), Player->GetCurrentInk()), 4, FLinearColor(0.75f, 0.55f, 1.0f));
 		DrawStatusLine(FString::Printf(TEXT("Damage: %.0f  Range: %.0f"), Player->GetCurrentAttackDamage(), Player->GetCurrentAttackRange()), 5, FLinearColor::White);
+		DrawStatusLine(FString::Printf(TEXT("Player HP: %.0f%%"), Player->GetHealthPercent() * 100.0f), 6, Player->GetHealthPercent() > 0.3f ? FLinearColor(0.35f, 1.0f, 0.55f) : FLinearColor::Red);
 	}
 	else
 	{
 		DrawStatusLine(TEXT("Weapon: --"), 4, FLinearColor::White);
 		DrawStatusLine(TEXT("Damage: --"), 5, FLinearColor::White);
+		DrawStatusLine(TEXT("Player HP: --"), 6, FLinearColor::White);
 	}
 
 	DrawLanternRepairPrompt();
