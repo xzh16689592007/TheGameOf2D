@@ -145,7 +145,9 @@ void ASideScrollingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
+	const float HealthMultiplier = FMath::Max(1.0f, HealthTestMultiplier);
+	MaxHealth *= HealthMultiplier;
+	CurrentHealth = MaxHealth;
 
 	bUseControllerRotationYaw = false;
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())

@@ -9,6 +9,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
 #include "ModengBossEnemy.h"
@@ -214,8 +215,22 @@ bool AModengEnemySpawner::TryFindSpawnLocation(FVector& OutSpawnLocation) const
 		const FVector TraceEnd = CandidateLocation - FVector(0.0f, 0.0f, GroundTraceDown);
 
 		FHitResult GroundHit;
-		FCollisionQueryParams QueryParams;
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ModengEnemySpawnGroundTrace), false);
 		QueryParams.AddIgnoredActor(this);
+		for (TActorIterator<APawn> It(GetWorld()); It; ++It)
+		{
+			if (APawn* Pawn = *It)
+			{
+				QueryParams.AddIgnoredActor(Pawn);
+			}
+		}
+		for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+		{
+			if (AModengLantern* Lantern = *It)
+			{
+				QueryParams.AddIgnoredActor(Lantern);
+			}
+		}
 
 		if (!GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
 		{
@@ -223,8 +238,40 @@ bool AModengEnemySpawner::TryFindSpawnLocation(FVector& OutSpawnLocation) const
 		}
 
 		CandidateLocation = GroundHit.ImpactPoint + FVector(0.0f, 0.0f, 85.0f);
+		if (IsSpawnLocationOccupied(CandidateLocation))
+		{
+			continue;
+		}
+
 		OutSpawnLocation = CandidateLocation;
 		return true;
+	}
+
+	return false;
+}
+
+bool AModengEnemySpawner::IsSpawnLocationOccupied(const FVector& SpawnLocation) const
+{
+	if (SpawnOccupancyCheckRadius <= 0.0f)
+	{
+		return false;
+	}
+
+	for (TActorIterator<APawn> It(GetWorld()); It; ++It)
+	{
+		const APawn* Pawn = *It;
+		if (!Pawn)
+		{
+			continue;
+		}
+
+		const FVector PawnLocation = Pawn->GetActorLocation();
+		const float HorizontalDistance = FVector::Dist2D(SpawnLocation, PawnLocation);
+		const float VerticalDistance = FMath::Abs(SpawnLocation.Z - PawnLocation.Z);
+		if (HorizontalDistance <= SpawnOccupancyCheckRadius && VerticalDistance <= 180.0f)
+		{
+			return true;
+		}
 	}
 
 	return false;

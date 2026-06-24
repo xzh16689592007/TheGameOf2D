@@ -21,7 +21,7 @@ AModengBossFireField::AModengBossFireField()
 	FireBuilderInfernoComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FireBuilderInfernoComponent->SetAutoActivate(true);
 	FireBuilderInfernoComponent->bAutoDestroy = false;
-	FireBuilderInfernoComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
+	FireBuilderInfernoComponent->SetRelativeLocation(FVector::ZeroVector);
 	FireBuilderInfernoComponent->SetRelativeScale3D(FVector(0.35f));
 
 	constexpr int32 FireBuilderFlameCount = 7;
@@ -41,7 +41,7 @@ AModengBossFireField::AModengBossFireField()
 	FireBuilderEmberComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FireBuilderEmberComponent->SetAutoActivate(true);
 	FireBuilderEmberComponent->bAutoDestroy = false;
-	FireBuilderEmberComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 28.0f));
+	FireBuilderEmberComponent->SetRelativeLocation(FVector::ZeroVector);
 	FireBuilderEmberComponent->SetRelativeScale3D(FVector(0.85f));
 
 	FireBuilderHeatComponent = CreateDefaultSubobject<UParticleSystemComponent>(TEXT("FireBuilderHeat"));
@@ -49,12 +49,12 @@ AModengBossFireField::AModengBossFireField()
 	FireBuilderHeatComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FireBuilderHeatComponent->SetAutoActivate(true);
 	FireBuilderHeatComponent->bAutoDestroy = false;
-	FireBuilderHeatComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 32.0f));
+	FireBuilderHeatComponent->SetRelativeLocation(FVector::ZeroVector);
 	FireBuilderHeatComponent->SetRelativeScale3D(FVector(0.6f));
 
 	FireLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FireLight"));
 	FireLight->SetupAttachment(SceneRoot);
-	FireLight->SetRelativeLocation(FVector(0.0f, 0.0f, 45.0f));
+	FireLight->SetRelativeLocation(FVector(0.0f, 0.0f, 24.0f));
 	FireLight->SetLightColor(FLinearColor(1.0f, 0.25f, 0.05f));
 	FireLight->SetIntensity(5000.0f);
 	FireLight->SetAttenuationRadius(430.0f);
@@ -197,7 +197,7 @@ void AModengBossFireField::UpdateFireBuilderEffects(float CurrentRadius, float A
 
 		FlameComponent->SetVisibility(bVisible);
 		FlameComponent->SetHiddenInGame(!bVisible);
-		FlameComponent->SetRelativeLocation(FVector(SignedUnit * LocalRadius, LaneOffsetY, 18.0f));
+		FlameComponent->SetRelativeLocation(FVector(SignedUnit * LocalRadius, LaneOffsetY, 0.0f));
 		FlameComponent->SetRelativeScale3D(FVector(
 			FMath::Max(0.26f, RadiusScale * FMath::Lerp(0.34f, 0.58f, 1.0f - DistanceFactor)) * LocalFlicker,
 			FMath::Max(0.24f, WidthScale * 0.34f),

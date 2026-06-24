@@ -5,6 +5,7 @@
 
 #include "Animation/AnimSequenceBase.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -16,6 +17,8 @@
 #include "ModengFastEnemy.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystem.h"
 #include "TimerManager.h"
@@ -61,6 +64,12 @@ AModengBossEnemy::AModengBossEnemy()
 	if (FinalExplosionEffect.Succeeded())
 	{
 		FireFieldFinalExplosionParticleSystem = FinalExplosionEffect.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> AreaSkillNiagaraEffect(TEXT("/Game/Niagara_Effects05/Effects/P_Ground_Impact01.P_Ground_Impact01"));
+	if (AreaSkillNiagaraEffect.Succeeded())
+	{
+		AreaSkillNiagaraSystem = AreaSkillNiagaraEffect.Object;
 	}
 
 	ApplyBossLoadout();
@@ -336,7 +345,26 @@ void AModengBossEnemy::CastAreaSkill()
 	}
 	EffectLocation.Z += AreaSkillEffectGroundOffset;
 
-	if (AreaSkillEffectClass)
+	if (AreaSkillNiagaraSystem)
+	{
+		const int32 SafeEffectCount = FMath::Max(1, AreaSkillEffectCount);
+		const float CenterOffset = (static_cast<float>(SafeEffectCount) - 1.0f) * 0.5f;
+		for (int32 EffectIndex = 0; EffectIndex < SafeEffectCount; ++EffectIndex)
+		{
+			FVector SpawnLocation = EffectLocation;
+			SpawnLocation.X += (static_cast<float>(EffectIndex) - CenterOffset) * AreaSkillEffectSpacing;
+
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				GetWorld(),
+				AreaSkillNiagaraSystem,
+				SpawnLocation,
+				FRotator::ZeroRotator,
+				FVector(AreaSkillNiagaraEffectScale),
+				true,
+				true);
+		}
+	}
+	else if (AreaSkillEffectClass)
 	{
 		const int32 SafeEffectCount = FMath::Max(1, AreaSkillEffectCount);
 		const float CenterOffset = (static_cast<float>(SafeEffectCount) - 1.0f) * 0.5f;
@@ -640,7 +668,12 @@ void AModengBossEnemy::ApplyFireFieldFinalExplosion()
 FVector AModengBossEnemy::GetGroundEffectLocation() const
 {
 	FVector EffectLocation = GetActorLocation();
-	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	if (const USkeletalMeshComponent* MeshComponent = GetMesh())
+	{
+		const FBoxSphereBounds MeshBounds = MeshComponent->Bounds;
+		EffectLocation.Z = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
+	}
+	else if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
 	{
 		EffectLocation.Z -= Capsule->GetScaledCapsuleHalfHeight();
 	}

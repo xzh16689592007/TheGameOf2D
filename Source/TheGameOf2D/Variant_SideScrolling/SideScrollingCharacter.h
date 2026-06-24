@@ -225,6 +225,9 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Side Scrolling|Health")
 	float CurrentHealth = 100.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health", meta = (ClampMin = "1.0"))
+	float HealthTestMultiplier = 10.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health", meta = (ClampMin = "0.0"))
 	float HitInvulnerabilityDuration = 0.35f;
 

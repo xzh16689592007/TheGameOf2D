@@ -9,6 +9,7 @@
 class AModengExplosionEffect;
 class AModengBossFireField;
 class AModengMagicProjectile;
+class UNiagaraSystem;
 class UParticleSystem;
 
 UCLASS()
@@ -71,6 +72,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area")
 	TSubclassOf<AModengExplosionEffect> AreaSkillEffectClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area")
+	TObjectPtr<UNiagaraSystem> AreaSkillNiagaraSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.01"))
+	float AreaSkillNiagaraEffectScale = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Area", meta = (ClampMin = "0.0"))
 	float AreaSkillEverySeconds = 7.0f;
 
@@ -125,8 +132,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health", meta = (ClampMin = "0.0"))
 	float FireFieldFinalExplosionDamage = 32.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health", meta = (ClampMin = "0.0"))
-	float FireFieldGroundOffset = 4.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health")
+	float FireFieldGroundOffset = 0.0f;
 
 	FTimerHandle ScytheDamageTimer;
 	FTimerHandle SummonTimer;

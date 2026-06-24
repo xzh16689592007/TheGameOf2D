@@ -105,6 +105,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner", meta = (ClampMin = "0.0"))
 	float GroundTraceDown = 2000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner", meta = (ClampMin = "0.0"))
+	float SpawnOccupancyCheckRadius = 90.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner")
 	bool bSpawnOnBeginPlay = true;
 
@@ -142,6 +145,7 @@ protected:
 
 	int32 CountAliveEnemies() const;
 	bool TryFindSpawnLocation(FVector& OutSpawnLocation) const;
+	bool IsSpawnLocationOccupied(const FVector& SpawnLocation) const;
 	bool AreAllLanternsExtinguished() const;
 	bool IsCurrentLevel(FName LevelName) const;
 	bool DoesConfiguredSecondLevelExist() const;

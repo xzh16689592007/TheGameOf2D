@@ -17,6 +17,7 @@ public class TheGameOf2D : ModuleRules
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
+			"Niagara",
 			"UMG",
 			"Slate",
 			"SlateCore"
