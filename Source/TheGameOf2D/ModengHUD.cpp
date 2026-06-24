@@ -97,6 +97,7 @@ void AModengHUD::DrawHUD()
 		DrawStatusLine(TEXT("Player HP: --"), 6, FLinearColor::White);
 	}
 
+	DrawPlayerStatusBars(Player);
 	DrawLanternRepairPrompt();
 }
 
@@ -110,6 +111,69 @@ void AModengHUD::DrawStatusLine(const FString& Text, int32 LineIndex, const FLin
 	FCanvasTextItem TextItem(FVector2D(PanelX, PanelY + LineHeight * LineIndex), FText::FromString(Text), GEngine->GetSmallFont(), Color);
 	TextItem.EnableShadow(FLinearColor::Black);
 	TextItem.Scale = FVector2D(1.15f, 1.15f);
+	Canvas->DrawItem(TextItem);
+}
+
+void AModengHUD::DrawPlayerStatusBars(const ASideScrollingCharacter* Player) const
+{
+	if (!Canvas || !GEngine || !Player)
+	{
+		return;
+	}
+
+	const FVector2D BarSize(PlayerStatusBarWidth, PlayerStatusBarHeight);
+	const FVector2D PanelSize(
+		PlayerStatusBarWidth + 24.0f,
+		PlayerStatusBarHeight * 2.0f + PlayerStatusBarGap + 24.0f);
+	const FVector2D PanelPosition(
+		Canvas->ClipX - PlayerStatusRightMargin - PanelSize.X,
+		PlayerStatusTopMargin);
+	const FVector2D HealthPosition = PanelPosition + FVector2D(12.0f, 12.0f);
+	const FVector2D InkPosition = HealthPosition + FVector2D(0.0f, PlayerStatusBarHeight + PlayerStatusBarGap);
+
+	FCanvasTileItem Panel(PanelPosition, PanelSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.42f));
+	Panel.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Panel);
+
+	DrawStatusBar(
+		HealthPosition,
+		BarSize,
+		Player->GetHealthPercent(),
+		FLinearColor(0.92f, 0.12f, 0.08f, 0.95f),
+		TEXT("HP"));
+
+	DrawStatusBar(
+		InkPosition,
+		BarSize,
+		Player->GetInkProgressPercent(),
+		FLinearColor(0.18f, 0.82f, 0.28f, 0.95f),
+		FString::Printf(TEXT("Ink %d"), Player->GetCurrentInk()));
+}
+
+void AModengHUD::DrawStatusBar(const FVector2D& Position, const FVector2D& Size, float Percent, const FLinearColor& FillColor, const FString& Label) const
+{
+	if (!Canvas || !GEngine)
+	{
+		return;
+	}
+
+	const float ClampedPercent = FMath::Clamp(Percent, 0.0f, 1.0f);
+	FCanvasTileItem Background(Position, Size, FLinearColor(0.02f, 0.02f, 0.025f, 0.88f));
+	Background.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Background);
+
+	const FVector2D InnerPosition = Position + FVector2D(2.0f, 2.0f);
+	const FVector2D InnerSize(FMath::Max(0.0f, (Size.X - 4.0f) * ClampedPercent), FMath::Max(0.0f, Size.Y - 4.0f));
+	if (InnerSize.X > 0.0f && InnerSize.Y > 0.0f)
+	{
+		FCanvasTileItem Fill(InnerPosition, InnerSize, FillColor);
+		Fill.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Fill);
+	}
+
+	FCanvasTextItem TextItem(Position + FVector2D(8.0f, -1.0f), FText::FromString(Label), GEngine->GetSmallFont(), FLinearColor::White);
+	TextItem.EnableShadow(FLinearColor::Black);
+	TextItem.Scale = FVector2D(0.9f, 0.9f);
 	Canvas->DrawItem(TextItem);
 }
 

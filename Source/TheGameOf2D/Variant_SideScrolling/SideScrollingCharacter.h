@@ -454,6 +454,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Progression")
 	int32 GetCurrentInk() const;
 
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Progression")
+	float GetInkProgressPercent() const;
+
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetCurrentAttackDamage() const;
 

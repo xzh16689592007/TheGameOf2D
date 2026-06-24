@@ -985,15 +985,20 @@ void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
 		return;
 	}
 
-	CurrentGroundComboStep = FMath::Clamp(ComboStepIndex, 1, 4);
+	const int32 TraceComboStep = FMath::Clamp(ComboStepIndex > 0 ? ComboStepIndex : CurrentGroundComboStep, 1, 4);
+	if (CurrentGroundComboStep <= 0)
+	{
+		CurrentGroundComboStep = TraceComboStep;
+	}
+
 	PendingAttackFacingSign = LastFacingX >= 0.0f ? 1.0f : -1.0f;
-	CurrentAttackDamageMultiplier = 0.75f + 0.15f * CurrentGroundComboStep;
-	if (CurrentGroundComboStep >= 4)
+	CurrentAttackDamageMultiplier = 0.75f + 0.15f * TraceComboStep;
+	if (TraceComboStep >= 4)
 	{
 		CurrentAttackDamageMultiplier = 1.4f;
 	}
-	CurrentAttackKnockbackDistance = CurrentGroundComboStep >= 4 ? 60.0f : 18.0f + 6.0f * CurrentGroundComboStep;
-	CurrentWeaponTraceRadius = CurrentGroundComboStep >= 4 ? 28.0f : 24.0f;
+	CurrentAttackKnockbackDistance = TraceComboStep >= 4 ? 60.0f : 18.0f + 6.0f * TraceComboStep;
+	CurrentWeaponTraceRadius = TraceComboStep >= 4 ? 28.0f : 24.0f;
 	CurrentMinimumWeaponMotionSpeed = 120.0f;
 	bCurrentUseAutomaticWeaponMotionHitWindow = true;
 	bAttackHitPending = true;
@@ -2026,6 +2031,21 @@ int32 ASideScrollingCharacter::GetWeaponLevel() const
 int32 ASideScrollingCharacter::GetCurrentInk() const
 {
 	return CurrentInk;
+}
+
+float ASideScrollingCharacter::GetInkProgressPercent() const
+{
+	if (WeaponLevel >= MaxWeaponLevel)
+	{
+		return 1.0f;
+	}
+
+	if (InkNeededPerWeaponLevel <= 0)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(static_cast<float>(CurrentInk) / static_cast<float>(InkNeededPerWeaponLevel), 0.0f, 1.0f);
 }
 
 float ASideScrollingCharacter::GetCurrentAttackDamage() const
