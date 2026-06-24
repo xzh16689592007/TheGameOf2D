@@ -65,6 +65,19 @@
     - `M_Lightning.uasset`, `M_Flare.uasset`, and `M_Sprite.uasset` are available for future lightning, flash, or sprite particles.
   - `Content/FX/Particles/Textures`
     - Useful trail textures include `T_Lightning`, `T_Tile_Noise_Tendril_01`, and `T_Turbulence_Seamless`.
+- Imported projectile / spell VFX folders:
+  - `Content/PewPewPack`
+    - Added in commit `8e67129`.
+    - Used by enemy/Boss ranged projectile visuals.
+    - Current C++ defaults:
+      - Ranged wizard projectile: `Content/PewPewPack/ParticleSystems/Blaster/Par_Blaster_2.uasset`
+      - Boss ranged volley projectile: `Content/PewPewPack/ParticleSystems/Helix/Par_Helix_03.uasset`
+    - The full pack was committed through Git LFS because the referenced projectile systems depend on pack materials, meshes, textures, and vector fields.
+  - `Content/FireEnergyVFX`
+    - Added in commit `8e67129`.
+    - Current C++ default Boss area-skill charge effect: `Content/FireEnergyVFX/Particles/P_PulseBeam.uasset`
+    - The full pack was committed through Git LFS so dependent materials/textures stay available.
+  - Do not commit `Content/Niagara_Effects05/Meshes/SM_box.Bat`; it is a tiny imported text/promotional file and is not a gameplay asset.
 - Imported sword animation folder: `Content/Sword_Animations`
   - Source library path: `D:\UE素材库\Sword Animation Pack宝剑动画套装\Sword Animation Pack宝剑动画套装\Sword Animation Pack\Sword Animation Pack 5.1\Sword_Animations`
   - This is the currently preferred player attack source for the prototype because it has cleanly grouped ground combo sequence assets.
@@ -171,6 +184,7 @@
   - C++ default animation hooks load modular skeleton idle, walk, attack, hit, and death animation sequences.
   - C++ can directly drive idle/walk looping animations with `bUseDirectLocomotionAnimations`, which avoids relying on the animation blueprint receiving movement speed from manual `SetActorLocation` movement.
   - Attacking a lantern temporarily plays the attack animation sequence, then restores the animation blueprint.
+  - Enemy melee damage is delayed by `AttackDamageDelay` after `PlayAttackAnimation()`, so basic/fast enemies no longer apply damage the same frame they enter range. The delayed hit stores the original target and rechecks range before applying damage, so moving out of range can make the attack miss.
   - Taking non-lethal damage plays a hit animation and still updates the health bar.
   - Dying plays the death animation sequence, disables collision immediately, then destroys after the animation/delay.
   - `EnemyBody` remains as a static mesh fallback and is hidden when skeletal visuals are enabled.
@@ -199,6 +213,7 @@
   - Uses modular skeleton visuals through `ApplyEnemyLoadout()`.
   - Current loadout was swapped to the lighter/fast unarmed modular skeleton look.
   - Spawns the native `AModengExplosionEffect` when it self-destructs.
+  - Explosion now has an `ExplosionDelay` after the attack animation starts. The target is rechecked before damage so a player/lantern that leaves range during the windup is not hit by the delayed detonation.
 
 - `AModengRangedEnemy`
   - Files:
@@ -207,6 +222,8 @@
   - Inherits `AModengEnemy`.
   - Uses the skeleton wizard mesh, wizard modular parts, staff, and spell-cast animation loadout.
   - Attacks lanterns from range by spawning `AModengMagicProjectile`.
+  - Default projectile visual now uses PewPewPack `Par_Blaster_2`.
+  - `ProjectileParticleSystem` and `ProjectileEffectScale` are exposed for tuning.
 
 - `AModengMagicProjectile`
   - Files:
@@ -214,6 +231,9 @@
     - `Source/TheGameOf2D/ModengMagicProjectile.cpp`
   - Projectile actor used by `AModengRangedEnemy`.
   - Travels toward the target lantern and applies impact damage/radius behavior on hit.
+  - Now owns a Cascade `ProjectileEffectComponent`.
+  - `InitializeProjectile()` accepts an optional `UParticleSystem` and scale so ranged enemies and Boss volleys can share movement/damage logic but use different visuals.
+  - The old engine sphere mesh remains as a fallback if no particle system is supplied or a VFX asset fails to load.
 
 - `AModengBossEnemy`
   - Files:
@@ -223,9 +243,13 @@
   - Uses the Reaper mesh and Reaper idle/float/attack/death animations from `Content/Reaper`.
   - Basic attack is a scythe melee hit, not the wizard projectile behavior.
   - Has timed ranged projectile volleys, area explosions, and minion summoning in addition to melee.
+  - Boss ranged volley now uses PewPewPack `Par_Helix_03` by default, separate from the wizard's Blaster projectile.
+  - Boss area skill now has a charge/windup phase using FireEnergyVFX `P_PulseBeam` attached to the Boss before the ground impact executes.
+  - Boss melee and normal attacks are paused while area-skill charging, preventing overlapping scythe and area-skill behavior.
+  - Area-skill Niagara impact visuals were reduced for performance: default count is `3`, lifetime is `1.0s`, and spacing is `190`. Damage and radius were not reduced by this VFX optimization.
   - Has health-threshold damage reduction shields represented by the health-bar color only; do not re-add the old shield bubble visual unless the team explicitly wants it.
   - First time health drops below 50%, Boss restores/locks to 50%, becomes invulnerable, stops moving/attacking, spawns an expanding fire field, then ends with a final explosion. After this phase, normal Boss logic resumes.
-  - Fire-field and explosion damage currently use the existing lantern-damage target model. If the project later adds player health, this range logic should be extended to damage the player too.
+  - Boss fire-field, area skill, final explosion, projectile, and scythe damage can now affect the player through `ApplyDamageToPlayer()` where appropriate, while still damaging lanterns.
 
 - `AModengBossFireField`
   - Files:
@@ -538,6 +562,8 @@ Expected content:
 ## Recent Commits
 
 ```text
+8e67129 Update enemy attack timing and projectile effects
+f0a53db Update boss effects and enemy spawn handling
 1af8cdd Fix melee enemy loadouts
 468472f Fix lantern repair interaction
 6dc11a5 Make lantern light more visible
@@ -564,7 +590,21 @@ b941d60 Add wave-based enemy spawning
 8b6d6ba Initial Unreal project
 ```
 
-Latest synced milestone before the current player-movement commit: commit `acdf3ec` is pulled from `origin/main`. The second-level Boss encounter, explosion/fire-field helpers, level-complete menu, Tomoe jump/fall locomotion, montage-driven ground combo, and ground combo cancel/loop notifies are already on GitHub.
+Latest synced gameplay milestone: commit `8e67129` is pushed to `origin/main`. It adds enemy/Boss ranged VFX resources, fixes enemy attack damage timing, adds Boss area-skill windup VFX, reduces Boss area-skill particle density, and includes the required VFX packs through Git LFS.
+
+Current enemy/Boss update in this handoff:
+
+- Added full `Content/PewPewPack` and `Content/FireEnergyVFX` imports through Git LFS.
+- Ranged wizard projectile defaults to PewPewPack `Par_Blaster_2`.
+- Boss ranged volley defaults to PewPewPack `Par_Helix_03`.
+- `AModengMagicProjectile` now supports a particle-system visual component and keeps its old sphere mesh as fallback.
+- Basic and fast melee enemies now delay damage with `AttackDamageDelay` instead of damaging immediately on entering attack range.
+- Exploder enemies now delay detonation with `ExplosionDelay`; the target is rechecked at detonation time.
+- Boss area skill now has a visible charge using `P_PulseBeam`, and Boss melee/ranged behavior is blocked while the area skill charges.
+- Boss area-skill Niagara impact density was reduced for performance: `AreaSkillEffectCount = 3`, `AreaSkillNiagaraEffectLifetime = 1.0`, `AreaSkillEffectSpacing = 190`.
+- Full build succeeded on 2026-06-24 with:
+  - `Result: Succeeded`
+- Push uploaded `530` Git LFS objects, about `308 MB`, in commit `8e67129`.
 
 Current player update in this handoff:
 
@@ -608,8 +648,10 @@ Current player update in this handoff:
 - `.gitattributes` exists and tracks `.uasset`, `.umap`, images, audio, video, etc. through Git LFS.
 - Git LFS is installed and initialized.
 - The Fab asset import under `Content/ROG_Creatures` should be committed through Git LFS.
+- `Content/PewPewPack` and `Content/FireEnergyVFX` are now committed through Git LFS. Fresh clones must run `git lfs pull` before opening the project, otherwise enemy/Boss VFX assets will be missing.
 - `Config/DefaultEditor.ini` may get noisy editor preview-profile changes from opening imported assets. Do not commit those preview-profile changes unless the team explicitly wants editor profile settings in source control.
 - Large Tomoe and CombatMaster imports were pushed through Git LFS in commit `9fcc0c0` (`878` LFS objects, about `1.1 GB` uploaded during push).
+- PewPewPack / FireEnergyVFX imports were pushed through Git LFS in commit `8e67129` (`530` LFS objects, about `308 MB` uploaded during push).
 - Current local working tree may still show `Config/DefaultEditor.ini` modified from editor preview-profile noise. Do not commit that file unless intentional.
 
 Team clone instructions:
@@ -625,10 +667,10 @@ git lfs pull
 - Basic, fast, exploder, and ranged enemies now have C++ skeletal loadouts using the modular skeleton / skeleton wizard asset packs.
 - Later-wave enemy health bars previously disappeared. This was fixed by revalidating/initializing the native health widget before health-bar update/show. User reported it works.
 - Fast and exploder enemies have distinct modular skeleton loadouts, but their exact scale/readability may still need gameplay tuning.
-- Ranged enemy exists and uses `AModengMagicProjectile`; tune projectile speed, impact radius, spawn offset, and wave pacing after playtesting.
-- Boss second-level encounter now exists in C++, but still needs PIE tuning for damage numbers, skill cadence, fire-field radius, and readability.
+- Ranged enemy exists and uses `AModengMagicProjectile` with PewPewPack Blaster visuals; tune projectile speed, impact radius, spawn offset, effect scale, and wave pacing after playtesting.
+- Boss second-level encounter now exists in C++, but still needs PIE tuning for damage numbers, skill cadence, fire-field radius, and readability. Area-skill impact VFX have already been reduced for performance, but may need further tuning on lower-end machines.
 - Boss fire-field visual is code-built from primitive meshes/materials. It is improved over the first prototype, but Niagara/fire texture VFX would be a better production-quality solution.
-- Current enemy/Boss damage target model still centers on lantern durability. If the design fully pivots to a player-health action platformer, add a player damage/health interface and route fire-field, explosion, melee, and projectile damage through it.
+- Enemy and Boss attacks now route player damage through `ASideScrollingCharacter::ApplyDamageToPlayer()` where implemented, while still supporting lantern damage. Continue checking every new enemy skill against both player and lantern targets.
 - HUD is C++ Canvas HUD, not polished UMG.
 - Player is now visually migrated from default Manny/Quinn appearance to Samurai Girl Tomoe for the current prototype.
 - Player attack now uses the new four-montage ground combo path, but it still needs in-editor feel tuning:
@@ -653,6 +695,9 @@ git lfs pull
 
 1. Playtest the second-level Boss encounter:
    - Confirm the Reaper Boss uses scythe melee, ranged volley, area explosion, summon, and half-health fire-field phase.
+   - Confirm the Boss ranged volley uses the Helix projectile effect and the wizard ranged enemy uses the Blaster projectile effect.
+   - Confirm the Boss area-skill charge effect is readable without obscuring the Boss.
+   - Confirm the reduced area-skill impact count performs better and still communicates the danger zone.
    - Tune `HalfHealthInvulnerableDuration`, `FireFieldStartRadius`, `FireFieldFinalRadius`, `FireFieldDamagePerSecond`, and `FireFieldFinalExplosionDamage`.
    - Confirm the half-health phase only triggers once and the Boss resumes normal behavior afterward.
    - Confirm the blue health bar still communicates damage reduction without any shield bubble visual.
@@ -670,6 +715,8 @@ git lfs pull
 4. Recheck fast/exploder readability:
    - Fast enemy should read as the axe-carrying brute.
    - Exploder enemy should read as the lighter unarmed unit and should spawn the explosion effect when it detonates.
+   - Confirm basic/fast melee hits now land after the visible attack windup, not immediately on contact.
+   - Confirm exploder windup and delayed explosion feel fair; tune `ExplosionDelay` if it feels too slow or too instant.
    - If the names feel counterintuitive after the model swap, tune scale/color/animation speed so gameplay roles stay obvious.
 
 5. Validate sheath movement and interrupt behavior:
