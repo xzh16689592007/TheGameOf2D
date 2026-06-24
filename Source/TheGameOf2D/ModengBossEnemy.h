@@ -9,6 +9,7 @@
 class AModengExplosionEffect;
 class AModengBossFireField;
 class AModengMagicProjectile;
+class UParticleSystem;
 
 UCLASS()
 class THEGAMEOF2D_API AModengBossEnemy : public AModengEnemy
@@ -102,6 +103,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health")
 	TSubclassOf<AModengBossFireField> FireFieldClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health")
+	TObjectPtr<UParticleSystem> FireFieldFinalExplosionParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health", meta = (ClampMin = "0.01"))
+	float FireFieldFinalExplosionEffectScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Half Health", meta = (ClampMin = "0.1"))
 	float HalfHealthInvulnerableDuration = 5.0f;

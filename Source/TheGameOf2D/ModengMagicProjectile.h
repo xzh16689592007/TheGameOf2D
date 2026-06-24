@@ -7,6 +7,7 @@
 #include "ModengMagicProjectile.generated.h"
 
 class AModengLantern;
+class ASideScrollingCharacter;
 class UPointLightComponent;
 class USphereComponent;
 class UStaticMeshComponent;
@@ -21,7 +22,7 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	void InitializeProjectile(AModengLantern* InTargetLantern, float InDamage, float InProjectileSpeed, float InImpactRadius);
+	void InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius);
 
 protected:
 	virtual void BeginPlay() override;
@@ -39,7 +40,10 @@ protected:
 	FVector TargetOffset = FVector(0.0f, 0.0f, 80.0f);
 
 	UPROPERTY(Transient)
-	TObjectPtr<AModengLantern> TargetLantern = nullptr;
+	TObjectPtr<AActor> TargetActor = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> DamageSourceActor = nullptr;
 
 	float Damage = 10.0f;
 	float ProjectileSpeed = 520.0f;

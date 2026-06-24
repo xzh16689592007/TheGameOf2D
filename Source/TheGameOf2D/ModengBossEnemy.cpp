@@ -16,8 +16,11 @@
 #include "ModengFastEnemy.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
-#include "Variant_SideScrolling/SideScrollingCharacter.h"
+#include "Kismet/GameplayStatics.h"
+#include "Particles/ParticleSystem.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
 
 AModengBossEnemy::AModengBossEnemy()
 {
@@ -26,7 +29,7 @@ AModengBossEnemy::AModengBossEnemy()
 	MoveSpeed = 95.0f;
 	AttackDamage = 28.0f;
 	AttackRange = 180.0f;
-	AttackInterval = 2.2f;
+	AttackInterval = 2.8f;
 	InkReward = 8;
 	EnemyBodyScale = FVector(1.6f, 1.6f, 2.2f);
 	EnemyBodyColor = FLinearColor(0.32f, 0.02f, 0.08f);
@@ -47,11 +50,18 @@ AModengBossEnemy::AModengBossEnemy()
 	BossProjectileClass = AModengMagicProjectile::StaticClass();
 	AreaSkillEffectClass = AModengExplosionEffect::StaticClass();
 	FireFieldClass = AModengBossFireField::StaticClass();
+	FireFieldFinalExplosionEffectScale = 1.0f;
 	MinionTypes = {
 		AModengEnemy::StaticClass(),
 		AModengFastEnemy::StaticClass()
 	};
 	NormalHealthBarColor = HealthBarColor;
+
+	static ConstructorHelpers::FObjectFinder<UParticleSystem> FinalExplosionEffect(TEXT("/Game/ExplosionBlueprints/Particles/P_BPExplosion20.P_BPExplosion20"));
+	if (FinalExplosionEffect.Succeeded())
+	{
+		FireFieldFinalExplosionParticleSystem = FinalExplosionEffect.Object;
+	}
 
 	ApplyBossLoadout();
 }
@@ -143,7 +153,7 @@ void AModengBossEnemy::MoveTowardTarget(float DeltaSeconds)
 
 void AModengBossEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!TargetLantern || bHalfHealthPhaseActive)
+	if (!IsCurrentTargetValid() || bHalfHealthPhaseActive)
 	{
 		return;
 	}
@@ -231,33 +241,15 @@ void AModengBossEnemy::ApplyBossLoadout()
 
 void AModengBossEnemy::ApplyScytheDamage()
 {
-	if (!TargetLantern || TargetLantern->IsExtinguished() || IsDead())
+	if (!IsCurrentTargetValid() || IsDead())
 	{
 		return;
 	}
 
 	FaceTargetLantern();
-	const float DistanceToTargetX = FMath::Abs(TargetLantern->GetActorLocation().X - GetActorLocation().X);
-	if (DistanceToTargetX <= AttackRange + 35.0f)
+	if (IsActorInAttackRange(GetCurrentTargetActor(), 35.0f, 140.0f))
 	{
-		TargetLantern->ApplyDamageToLantern(AttackDamage);
-	}
-
-	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
-	{
-		ASideScrollingCharacter* Player = *It;
-		if (!Player || Player->IsPlayerDefeated())
-		{
-			continue;
-		}
-
-		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
-		const float DistanceToPlayerZ = FMath::Abs(Player->GetActorLocation().Z - GetActorLocation().Z);
-		if (DistanceToPlayerX <= AttackRange + 35.0f && DistanceToPlayerZ <= 140.0f)
-		{
-			Player->ApplyDamageToPlayer(AttackDamage, this);
-			break;
-		}
+		ApplyDamageToCurrentTarget(AttackDamage);
 	}
 }
 
@@ -268,7 +260,7 @@ void AModengBossEnemy::SummonMinions()
 		return;
 	}
 
-	const float FacingSign = TargetLantern ? FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X) : 1.0f;
+	const float FacingSign = IsCurrentTargetValid() ? GetCurrentTargetDirectionX() : 1.0f;
 	const float SpawnDirection = FMath::IsNearlyZero(FacingSign) ? 1.0f : -FacingSign;
 
 	for (int32 MinionIndex = 0; MinionIndex < MinionsPerSummon; ++MinionIndex)
@@ -290,7 +282,8 @@ void AModengBossEnemy::SummonMinions()
 
 void AModengBossEnemy::CastRangedSkill()
 {
-	if (!BossProjectileClass || !TargetLantern || TargetLantern->IsExtinguished() || IsDead() || bHalfHealthPhaseActive)
+	AActor* CurrentTarget = GetCurrentTargetActor();
+	if (!BossProjectileClass || !CurrentTarget || !IsCurrentTargetValid() || IsDead() || bHalfHealthPhaseActive)
 	{
 		return;
 	}
@@ -298,7 +291,7 @@ void AModengBossEnemy::CastRangedSkill()
 	FaceTargetLantern();
 	PlayAttackAnimation();
 
-	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	const float DirectionX = GetCurrentTargetDirectionX();
 	const float SafeDirectionX = FMath::IsNearlyZero(DirectionX) ? 1.0f : DirectionX;
 	const float CenterOffset = (static_cast<float>(RangedProjectileCount) - 1.0f) * 0.5f;
 
@@ -310,7 +303,7 @@ void AModengBossEnemy::CastRangedSkill()
 			RangedProjectileSpawnOffset.Y,
 			RangedProjectileSpawnOffset.Z + VerticalOffset);
 		const FVector SpawnLocation = GetActorLocation() + SpawnOffset;
-		const FVector TargetLocation = TargetLantern->GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
+		const FVector TargetLocation = CurrentTarget->GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
 		const FRotator SpawnRotation = (TargetLocation - SpawnLocation).Rotation();
 
 		FActorSpawnParameters SpawnParams;
@@ -321,14 +314,14 @@ void AModengBossEnemy::CastRangedSkill()
 		AModengMagicProjectile* Projectile = GetWorld()->SpawnActor<AModengMagicProjectile>(BossProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
 		if (Projectile)
 		{
-			Projectile->InitializeProjectile(TargetLantern, RangedProjectileDamage, RangedProjectileSpeed, RangedProjectileImpactRadius);
+			Projectile->InitializeProjectile(CurrentTarget, RangedProjectileDamage, RangedProjectileSpeed, RangedProjectileImpactRadius);
 		}
 	}
 }
 
 void AModengBossEnemy::CastAreaSkill()
 {
-	if (!TargetLantern || TargetLantern->IsExtinguished() || IsDead() || bHalfHealthPhaseActive)
+	if (!IsCurrentTargetValid() || IsDead() || bHalfHealthPhaseActive)
 	{
 		return;
 	}
@@ -372,6 +365,21 @@ void AModengBossEnemy::CastAreaSkill()
 		if (DistanceToLanternX <= AreaSkillRadius)
 		{
 			Lantern->ApplyDamageToLantern(AreaSkillDamage);
+		}
+	}
+
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		ASideScrollingCharacter* Player = *It;
+		if (!Player || Player->IsPlayerDefeated())
+		{
+			continue;
+		}
+
+		const float DistanceToPlayerX = FMath::Abs(Player->GetActorLocation().X - GetActorLocation().X);
+		if (DistanceToPlayerX <= AreaSkillRadius)
+		{
+			Player->ApplyDamageToPlayer(AreaSkillDamage, this);
 		}
 	}
 }
@@ -573,7 +581,18 @@ void AModengBossEnemy::ApplyFireFieldDamage(float DeltaSeconds)
 void AModengBossEnemy::ApplyFireFieldFinalExplosion()
 {
 	const FVector ExplosionLocation = GetGroundEffectLocation();
-	if (AreaSkillEffectClass)
+	if (FireFieldFinalExplosionParticleSystem)
+	{
+		const float ExplosionVisualScale = FireFieldFinalExplosionEffectScale * FMath::Max(1.0f, FireFieldFinalRadius / 230.0f);
+		UGameplayStatics::SpawnEmitterAtLocation(
+			GetWorld(),
+			FireFieldFinalExplosionParticleSystem,
+			ExplosionLocation,
+			FRotator::ZeroRotator,
+			FVector(ExplosionVisualScale),
+			true);
+	}
+	else if (AreaSkillEffectClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
@@ -582,7 +601,7 @@ void AModengBossEnemy::ApplyFireFieldFinalExplosion()
 		AModengExplosionEffect* Explosion = GetWorld()->SpawnActor<AModengExplosionEffect>(AreaSkillEffectClass, ExplosionLocation, FRotator::ZeroRotator, SpawnParams);
 		if (Explosion)
 		{
-			const float ExplosionVisualScale = FMath::Max(1.0f, FireFieldFinalRadius / 230.0f);
+			const float ExplosionVisualScale = FireFieldFinalExplosionEffectScale * FMath::Max(1.0f, FireFieldFinalRadius / 230.0f);
 			Explosion->SetActorScale3D(FVector(ExplosionVisualScale, ExplosionVisualScale, 1.0f));
 		}
 	}

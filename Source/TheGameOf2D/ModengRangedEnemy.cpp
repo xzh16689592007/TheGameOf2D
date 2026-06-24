@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "TimerManager.h"
 
 AModengRangedEnemy::AModengRangedEnemy()
@@ -17,7 +18,7 @@ AModengRangedEnemy::AModengRangedEnemy()
 	MoveSpeed = 155.0f;
 	AttackDamage = 9.0f;
 	AttackRange = 650.0f;
-	AttackInterval = 2.1f;
+	AttackInterval = 2.7f;
 	InkReward = 2;
 	EnemyBodyScale = FVector(0.9f, 0.9f, 1.25f);
 	EnemyBodyColor = FLinearColor(0.22f, 0.08f, 0.42f);
@@ -42,7 +43,7 @@ void AModengRangedEnemy::BeginPlay()
 
 void AModengRangedEnemy::AttackTarget(float DeltaSeconds)
 {
-	if (!TargetLantern)
+	if (!IsCurrentTargetValid())
 	{
 		return;
 	}
@@ -140,19 +141,20 @@ void AModengRangedEnemy::ApplyEnemyLoadout()
 
 void AModengRangedEnemy::FireProjectile()
 {
-	if (!ProjectileClass || !TargetLantern || TargetLantern->IsExtinguished() || IsDead())
+	AActor* CurrentTarget = GetCurrentTargetActor();
+	if (!ProjectileClass || !CurrentTarget || !IsCurrentTargetValid() || IsDead())
 	{
 		return;
 	}
 
-	const float DirectionX = FMath::Sign(TargetLantern->GetActorLocation().X - GetActorLocation().X);
+	const float DirectionX = GetCurrentTargetDirectionX();
 	FaceTargetLantern();
 	const FVector SpawnOffset = FVector(
 		FMath::IsNearlyZero(DirectionX) ? ProjectileSpawnOffset.X : ProjectileSpawnOffset.X * DirectionX,
 		ProjectileSpawnOffset.Y,
 		ProjectileSpawnOffset.Z);
 	const FVector SpawnLocation = GetActorLocation() + SpawnOffset;
-	const FVector TargetLocation = TargetLantern->GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
+	const FVector TargetLocation = CurrentTarget->GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
 	const FRotator SpawnRotation = (TargetLocation - SpawnLocation).Rotation();
 
 	FActorSpawnParameters SpawnParams;
@@ -163,6 +165,6 @@ void AModengRangedEnemy::FireProjectile()
 	AModengMagicProjectile* Projectile = GetWorld()->SpawnActor<AModengMagicProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
 	if (Projectile)
 	{
-		Projectile->InitializeProjectile(TargetLantern, AttackDamage, ProjectileSpeed, ProjectileImpactRadius);
+		Projectile->InitializeProjectile(CurrentTarget, AttackDamage, ProjectileSpeed, ProjectileImpactRadius);
 	}
 }

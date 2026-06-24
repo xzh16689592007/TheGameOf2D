@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "ModengLantern.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 AModengMagicProjectile::AModengMagicProjectile()
@@ -54,13 +55,30 @@ void AModengMagicProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!IsValid(TargetLantern) || TargetLantern->IsExtinguished())
+	if (!IsValid(TargetActor))
 	{
 		Destroy();
 		return;
 	}
 
-	const FVector TargetLocation = TargetLantern->GetActorLocation() + TargetOffset;
+	if (const AModengLantern* Lantern = Cast<AModengLantern>(TargetActor))
+	{
+		if (Lantern->IsExtinguished())
+		{
+			Destroy();
+			return;
+		}
+	}
+	else if (const ASideScrollingCharacter* Player = Cast<ASideScrollingCharacter>(TargetActor))
+	{
+		if (Player->IsPlayerDefeated())
+		{
+			Destroy();
+			return;
+		}
+	}
+
+	const FVector TargetLocation = TargetActor->GetActorLocation() + TargetOffset;
 	const FVector CurrentLocation = GetActorLocation();
 	const FVector ToTarget = TargetLocation - CurrentLocation;
 	const float DistanceToTarget = ToTarget.Size();
@@ -84,9 +102,10 @@ void AModengMagicProjectile::Tick(float DeltaSeconds)
 	SetActorRotation(MoveDirection.Rotation());
 }
 
-void AModengMagicProjectile::InitializeProjectile(AModengLantern* InTargetLantern, float InDamage, float InProjectileSpeed, float InImpactRadius)
+void AModengMagicProjectile::InitializeProjectile(AActor* InTargetActor, float InDamage, float InProjectileSpeed, float InImpactRadius)
 {
-	TargetLantern = InTargetLantern;
+	TargetActor = InTargetActor;
+	DamageSourceActor = GetOwner() ? GetOwner() : this;
 	Damage = FMath::Max(0.0f, InDamage);
 	ProjectileSpeed = FMath::Max(1.0f, InProjectileSpeed);
 	ImpactRadius = FMath::Max(1.0f, InImpactRadius);
@@ -94,9 +113,19 @@ void AModengMagicProjectile::InitializeProjectile(AModengLantern* InTargetLanter
 
 void AModengMagicProjectile::ImpactTarget()
 {
-	if (IsValid(TargetLantern) && !TargetLantern->IsExtinguished())
+	if (AModengLantern* Lantern = Cast<AModengLantern>(TargetActor))
 	{
-		TargetLantern->ApplyDamageToLantern(Damage);
+		if (!Lantern->IsExtinguished())
+		{
+			Lantern->ApplyDamageToLantern(Damage);
+		}
+	}
+	else if (ASideScrollingCharacter* Player = Cast<ASideScrollingCharacter>(TargetActor))
+	{
+		if (!Player->IsPlayerDefeated())
+		{
+			Player->ApplyDamageToPlayer(Damage, DamageSourceActor ? DamageSourceActor.Get() : this);
+		}
 	}
 
 	Destroy();

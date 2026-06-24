@@ -64,10 +64,19 @@ protected:
 	float AttackDamage = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Attack", meta = (ClampMin = "0.1"))
-	float AttackInterval = 1.0f;
+	float AttackInterval = 1.35f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Targeting", meta = (ClampMin = "0.0"))
 	float RetargetInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Targeting")
+	bool bCanTargetPlayer = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Targeting", meta = (ClampMin = "0.0"))
+	float PlayerTargetAcquireRange = 750.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Targeting", meta = (ClampMin = "0.0"))
+	float PlayerAttackHeightTolerance = 110.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Reward", meta = (ClampMin = "0"))
 	int32 InkReward = 1;
@@ -177,6 +186,12 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Enemy|Targeting")
 	AModengLantern* TargetLantern = nullptr;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Enemy|Targeting")
+	ASideScrollingCharacter* TargetPlayer = nullptr;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Enemy|Targeting")
+	TObjectPtr<AActor> TargetActor = nullptr;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Enemy|Reward")
 	ASideScrollingCharacter* LastDamagingPlayer = nullptr;
 
@@ -194,11 +209,18 @@ protected:
 	bool bOneShotAnimationActive = false;
 	bool bWantsWalkAnimation = false;
 
-	virtual void FindTargetLantern();
+	virtual void FindTarget();
 	virtual void MoveTowardTarget(float DeltaSeconds);
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
 	virtual void ApplyEnemyLoadout();
+	AActor* GetCurrentTargetActor() const;
+	bool IsCurrentTargetValid() const;
+	bool IsActorInAttackRange(const AActor* Actor, float ExtraRange = 0.0f, float PlayerHeightToleranceOverride = -1.0f) const;
+	bool ApplyDamageToCurrentTarget(float DamageAmount);
+	FVector GetCurrentTargetLocation() const;
+	float GetCurrentTargetDirectionX() const;
+	bool IsTargetingPlayer() const;
 	void FaceTargetLantern();
 	void ConfigureEnemyVisuals();
 	void ConfigureEnemyMeshParts(bool bHasSkeletalVisual);

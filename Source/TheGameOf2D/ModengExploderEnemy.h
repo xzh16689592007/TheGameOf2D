@@ -7,6 +7,7 @@
 #include "ModengExploderEnemy.generated.h"
 
 class AModengExplosionEffect;
+class UParticleSystem;
 
 UCLASS()
 class THEGAMEOF2D_API AModengExploderEnemy : public AModengEnemy
@@ -22,4 +23,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion")
 	TSubclassOf<AModengExplosionEffect> ExplosionEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion")
+	TObjectPtr<UParticleSystem> ExplosionParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Explosion", meta = (ClampMin = "0.01"))
+	float ExplosionEffectScale = 1.0f;
 };
