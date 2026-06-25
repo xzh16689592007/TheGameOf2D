@@ -255,6 +255,30 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit", meta = (ClampMin = "0.0"))
 	float HitReactionKnockbackImpulse = 380.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float SkillReleaseDuration = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill")
+	bool bSkillGrantsInvulnerability = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> SkillAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> SkillMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	FName SkillSlotName = TEXT("GroundAttackSlot");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill", meta = (ClampMin = "0.1"))
+	float SkillPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill", meta = (ClampMin = "0.0"))
+	float SkillBlendInTime = 0.04f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill", meta = (ClampMin = "0.0"))
+	float SkillBlendOutTime = 0.12f;
+
 	/** Extra damage gained for each weapon level after level 1 */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
 	float DamageGainPerWeaponLevel = 10.0f;
@@ -321,6 +345,7 @@ protected:
 	FTimerHandle AttackHitWindowEndTimer;
 	FTimerHandle HitInvulnerabilityTimer;
 	FTimerHandle HitReactionTimer;
+	FTimerHandle SkillReleaseTimer;
 
 	FTransform MeshTransformBeforeAttackAnimation;
 	FVector PreviousWeaponTraceStart = FVector::ZeroVector;
@@ -356,6 +381,7 @@ protected:
 	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
 	UAnimMontage* ActiveHitReactionMontage = nullptr;
 	UAnimMontage* ActiveRollMontage = nullptr;
+	UAnimMontage* ActiveSkillMontage = nullptr;
 
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
@@ -376,6 +402,7 @@ protected:
 
 	bool bAttackAnimationInProgress = false;
 	bool bHitReactionInProgress = false;
+	bool bSkillReleaseInProgress = false;
 	bool bDamageInvulnerable = false;
 	bool bPlayerDefeated = false;
 
@@ -440,6 +467,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoInteract();
 
+	/** Handles skill inputs from either controls or UI interfaces */
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill();
+
+	UFUNCTION(BlueprintPure, Category="Input")
+	bool IsSkillReleaseInProgress() const;
+
+	/** Event hook for Blueprint skill animation/gameplay setup */
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void OnSkillInputPressed();
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void OnSkillReleaseFinished();
+
 	/** Handles basic attack inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoAttack();
@@ -484,6 +525,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
 	void SetCombatWeaponDrawnForNotify(bool bDrawn);
 
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
+	void SetAnimationWeaponModeForNotify(bool bUseSkeletalWeapon, bool bUseSheathedWeapon, FName SkeletalWeaponComponentName, FName SocketWeaponComponentName);
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
+	void SetSkillWeaponModeForNotify(FName WeaponModeName, FName NormalHandComponentName = TEXT("Sword_Hand"), FName SkillHandComponentName = TEXT("Sword_SkillHand"), FName BoneComponentName = TEXT("Sword_Bone"));
+
 protected:
 
 	/** Handles advanced jump logic */
@@ -518,6 +565,12 @@ protected:
 	void FinishHitReaction();
 	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void ClearDamageInvulnerability();
+	bool CanStartSkill() const;
+	void StartSkillRelease();
+	void FinishSkillRelease();
+	float PlaySkillReleaseAnimation();
+	void StopActiveSkillMontage(float BlendOutTime);
+	void OnSkillMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void StopActiveRollMontage(float BlendOutTime);
 	void TryConsumeRollQueuedInput();

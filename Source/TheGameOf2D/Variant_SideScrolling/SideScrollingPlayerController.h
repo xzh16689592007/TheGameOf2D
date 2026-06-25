@@ -66,6 +66,8 @@ protected:
 
 	void TryRepairNearestLantern();
 
+	void DoSkill();
+
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
 

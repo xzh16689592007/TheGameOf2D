@@ -20,7 +20,8 @@
   - Lanterns have durability.
   - Enemies move toward the nearest lit lantern.
   - Enemies attack lanterns and reduce durability.
-  - Player repairs lanterns with `E` or `F`.
+  - Player repairs lanterns with `F`.
+  - Player uses the current skill with `E`.
   - Player attacks enemies with left mouse button or `J`.
   - Killing enemies gives ink.
   - Ink upgrades weapon level automatically.
@@ -306,8 +307,22 @@
     - `Source/TheGameOf2D/Variant_SideScrolling/SideScrollingCharacter.cpp`
   - Modified from UE side-scrolling template.
   - Interaction:
-    - `E` and `F` call `DoInteract()`.
+    - `F` repairs/interacts with nearby lanterns/interactive actors.
     - Uses overlap query to find actors implementing `ISideScrollingInteractable`.
+  - Skill:
+    - `E` is routed by `ASideScrollingPlayerController::DoSkill()` into `ASideScrollingCharacter::DoSkill()`.
+    - The skill can only start while grounded. It is blocked during jump/fall, roll, hit reaction, defeat, and while already releasing.
+    - Ground attacks/sheathing can be interrupted into the skill; C++ stops the active attack/transition montage before entering the skill release state.
+    - During skill release, movement, jump, drop, interact, attack, and roll inputs are ignored.
+    - During skill release, `ApplyDamageToPlayer()` treats the player as invulnerable when `bSkillGrantsInvulnerability` is true.
+    - Skill playback is configured by `SkillAnimation`, `SkillMontage`, `SkillSlotName`, play rate, and blend settings. For current setup, prefer assigning the sequence to `SkillAnimation` and leaving `SkillMontage` empty so sequence notifies fire reliably through the dynamic montage on `GroundAttackSlot`.
+    - Current default skill assets live under `Content/MoDeng/Animations/Tomoe/Attack/Skill/`, including `AS_Combo_Attack_All_Seq` / `AS_Combo_Attack_All_Seq_Montage`; a shorter user-edited FBX/sequence variant may be used for the actual `SkillAnimation` override in `BP_SideScrollingCharacter`.
+    - `SkillReleaseDuration` is only the fallback duration when no skill animation plays; otherwise C++ uses the animation duration.
+    - `SideScrollingAnimNotify_SetSkillWeaponMode` is a native skill-only notify for weapon visibility during the skill. Place it on the skill AnimSequence:
+      - `SkillHand`: hides normal hand sword and bone sword, shows `Sword_SkillHand`.
+      - `SwordBone`: hides hand swords, shows `Sword_Bone` for the authored spinning/turning blade section.
+      - `InScabbard`: restores sheathed state at the end of the skill by showing `Sword_InScabbard` and hiding `Sword_Hand`, `Sword_SkillHand`, and `Sword_Bone`.
+    - `FinishSkillRelease()` also falls back to `InScabbard`, so a missed final notify should not leave the weapon in skill-hand/bone mode.
   - Attack:
     - `J` and left mouse button call `DoAttack()`.
     - Current ground player attack system is a C++ four-step combo driven by four independent Anim Montages:
@@ -380,7 +395,8 @@
 
 - Move: side-scrolling template movement input.
 - Jump: template jump input. `JumpMaxCount = 2`, so the player has one air jump.
-- Repair/interact: `E` or `F`.
+- Skill: `E`.
+- Repair/interact: `F`.
 - Attack: left mouse button or `J`.
 - Roll/dodge: right mouse button.
 
@@ -474,10 +490,13 @@
     - Add/use a right-hand socket named `Socket_Katana_R` on `hand_r`.
     - `BP_SideScrollingCharacter` now uses a three-component sword display setup:
       - `Sword_Hand` is the hand-held sword for combat/attacks.
-      - `Sword_Sheathed` is the fake sheathed/waist sword placed inside the scabbard; it is visible when the weapon is not drawn and hidden while attacking/drawn.
-      - `Sword_InScabbard` is the scabbard component; it should stay visible in both drawn and sheathed states.
+      - `Sword_InScabbard` is the fake sheathed/waist sword placed inside the scabbard; it is visible when the weapon is not drawn and hidden while attacking/drawn.
+      - `Sword_Sheathed` is the scabbard component; it should stay visible in both drawn and sheathed states.
+      - `Sword_SkillHand` is a skill-only hand sword shown by `SideScrollingAnimNotify_SetSkillWeaponMode`.
+      - `Sword_Bone` is a skill-only bone/socket-following sword used during the turning/spinning section of the skill.
       - All weapon/scabbard static mesh components should have collision disabled.
       - C++ exposes `SetSceneComponentVisibleByName()` and `SetCombatWeaponDrawnForNotify()` for AnimNotify Blueprints to switch weapon visibility at authored frames.
+      - C++ exposes `SetSkillWeaponModeForNotify()` for the native skill weapon notify; use this for the E skill instead of reusing regular attack draw/sheath notifies.
       - `AN_ShowSheathedSword` should call `SetCombatWeaponDrawnForNotify(false)` if the sheathed sword needs to appear before the transition montage naturally ends.
     - Add/keep `KatanaTraceStart` and `KatanaTraceEnd` scene components as children of the hand-held weapon component (`Sword_Hand` / previous `Katana`).
     - `KatanaTraceStart` should sit near the blade root/guard.
@@ -633,9 +652,20 @@ Current player update in this handoff:
   - Added `Sword_start`, `Sword_end`, and `Show` sockets/preview helpers on `SKEL_Tomoe_Skeleton`.
   - `BP_SideScrollingCharacter` now references the Sci-fi Frozen Sword assets for the visible weapon/scabbard setup.
   - The weapon still uses C++ trace components for damage; the mesh itself should remain non-colliding.
-- A full build after these C++ changes succeeded on 2026-06-17 with:
+- Added current E skill prototype:
+  - `E` triggers a grounded-only skill release; `F` is now the repair/interact key.
+  - Skill release locks player input and grants invulnerability while active.
+  - `SkillAnimation` / `SkillMontage` / `SkillSlotName` are exposed on `BP_SideScrollingCharacter`; prefer setting the skill sequence on `SkillAnimation` and leaving `SkillMontage` empty while tuning notifies.
+  - Added native `SideScrollingAnimNotify_SetSkillWeaponMode` with `SkillHand`, `SwordBone`, and `InScabbard` modes for the authored skill weapon handoff.
+  - Current skill weapon component plan: normal combat uses `Sword_Hand`; skill startup uses `Sword_SkillHand`; skill turning section uses `Sword_Bone`; skill end returns to `Sword_InScabbard`.
+- Added Blender helper scripts under `Tools/Blender` for experimenting with current-action/root-motion editing:
+  - `scale_root_motion.py`
+  - `edit_current_action_root_motion.py`
+  - `rewrite_fbx_root_motion.py`
+  - These are workflow helpers only; verify edited animations in Blender/UE before replacing project assets.
+- A full build after these C++ changes succeeded on 2026-06-25 with:
   - `Result: Succeeded`
-- `outputs/`, `tools/`, and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
+- `outputs/` and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
 
 ## Git Setup And Notes
 
@@ -752,9 +782,11 @@ git lfs pull
 9. Polish draw/sheath flow:
    - Confirm `CombatToIdleAnimation` on `BP_SideScrollingCharacter` points to `Content/MoDeng/Animations/Tomoe/Idle_Run/Idle_Combat_To_Idle_Seq.uasset`.
    - Keep the initial sword state as sheathed: `Sword_Hand` hidden, `Sword_Sheathed` visible, and `Sword_InScabbard` visible.
-   - `Sword_InScabbard` is the visible scabbard and should remain visible; `Sword_Sheathed` is the fake sword inside it and is hidden while the hand sword is drawn.
+   - `Sword_Sheathed` is the visible scabbard and should remain visible; `Sword_InScabbard` is the fake sword inside it and is hidden while the hand sword is drawn.
+   - `Sword_SkillHand` and `Sword_Bone` are skill-only sword display components controlled by `SideScrollingAnimNotify_SetSkillWeaponMode`.
    - Tune the `AN_ShowSheathedSword` notify position in `Idle_Combat_To_Idle_Seq` to control when the sheathed sword reappears during the return-to-idle animation.
-   - If a visibility notify needs Blueprint logic, call `SetCombatWeaponDrawnForNotify(false)` or `SetSceneComponentVisibleByName()` on `BP_SideScrollingCharacter`.
+   - For regular draw/sheath visibility, call `SetCombatWeaponDrawnForNotify(false)` or `SetSceneComponentVisibleByName()` on `BP_SideScrollingCharacter`.
+   - For the E skill, prefer the native `SetSkillWeaponMode` notify modes: `SkillHand`, `SwordBone`, then `InScabbard`.
 
 10. Polish attack hit feedback and VFX:
    - Add short hit stop on successful player melee hit.
