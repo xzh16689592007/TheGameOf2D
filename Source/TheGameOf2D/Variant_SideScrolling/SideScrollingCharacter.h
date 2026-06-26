@@ -353,10 +353,32 @@ protected:
 	FTimerHandle HitReactionTimer;
 	FTimerHandle SkillReleaseTimer;
 
+	struct FActiveAttackHitWindow
+	{
+		FVector PreviousWeaponTraceStart = FVector::ZeroVector;
+		FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
+		TSet<AModengEnemy*> HitEnemies;
+		float FacingSign = 1.0f;
+		float DamageMultiplier = 1.0f;
+		float KnockbackDistance = 30.0f;
+		float WeaponTraceRadius = 24.0f;
+		float MinimumWeaponMotionSpeed = 180.0f;
+		bool bUseAutomaticWeaponMotionHitWindow = false;
+		bool bForceCurrentSegmentHit = false;
+		bool bHasPreviousWeaponTrace = false;
+		bool bRegisteredHit = false;
+	};
+
+	struct FDeferredAttackKnockback
+	{
+		TWeakObjectPtr<AModengEnemy> Enemy;
+		float FacingSign = 1.0f;
+		float Distance = 0.0f;
+	};
+
 	FTransform MeshTransformBeforeAttackAnimation;
-	FVector PreviousWeaponTraceStart = FVector::ZeroVector;
-	FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
-	TSet<AModengEnemy*> HitEnemiesThisAttack;
+	TArray<FActiveAttackHitWindow> ActiveAttackHitWindows;
+	TArray<FDeferredAttackKnockback> DeferredAttackKnockbacks;
 	float PendingAttackFacingSign = 1.0f;
 	float CurrentAttackDamageMultiplier = 1.0f;
 	float CurrentAttackKnockbackDistance = 30.0f;
@@ -367,8 +389,8 @@ protected:
 	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
 	bool bAttackHitWindowActive = false;
-	bool bHasPreviousWeaponTrace = false;
 	bool bAttackRegisteredHit = false;
+	bool bDeferAttackKnockback = false;
 	bool bComboInputQueued = false;
 	bool bUseSkillWeaponTrace = false;
 	bool bGroundAttackMontageInProgress = false;
@@ -586,7 +608,10 @@ protected:
 	void ApplyPendingAttackHit();
 	void BeginAttackHitWindow();
 	void EndAttackHitWindow();
+	void ClearAttackHitWindows(bool bReportMisses = false);
+	void RefreshAttackHitWindowState();
 	void UpdateAttackHitWindow();
+	void FlushDeferredAttackKnockbacks();
 	void RestorePlayerAnimationBlueprint();
 	void FinishAttackAnimation();
 	void InterruptAttackAnimation();
@@ -594,9 +619,9 @@ protected:
 	void UpdateFacingDirection(float FacingSign);
 	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
 	bool ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const;
-	bool ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted);
-	bool ApplyFallbackBoxAttackHit(float FacingSign);
-	void DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign);
+	bool ApplyWeaponTraceAttackHit(FActiveAttackHitWindow& AttackWindow, bool& bOutTraceAttempted);
+	bool ApplyFallbackBoxAttackHit(FActiveAttackHitWindow& AttackWindow);
+	void DamageEnemyFromAttack(AModengEnemy* Enemy, const FActiveAttackHitWindow& AttackWindow);
 
 public:
 

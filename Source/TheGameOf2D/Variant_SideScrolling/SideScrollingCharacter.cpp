@@ -563,7 +563,7 @@ void ASideScrollingCharacter::DoAttack()
 		GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
 		if (bAttackHitWindowActive)
 		{
-			EndAttackHitWindow();
+			ClearAttackHitWindows();
 		}
 
 		UAnimMontage* MontageToStop = ActiveCombatTransitionMontage;
@@ -711,10 +711,9 @@ void ASideScrollingCharacter::StartAirToFloorAttack()
 	bCurrentUseAutomaticWeaponMotionHitWindow = true;
 	bAttackHitPending = true;
 	bAttackHitWindowActive = false;
-	bHasPreviousWeaponTrace = false;
 	bAttackRegisteredHit = false;
 	bComboInputQueued = false;
-	HitEnemiesThisAttack.Empty();
+	ActiveAttackHitWindows.Empty();
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
@@ -805,7 +804,7 @@ void ASideScrollingCharacter::FinishAirToFloorImpact()
 	if (bAttackHitWindowActive)
 	{
 		UpdateAttackHitWindow();
-		EndAttackHitWindow();
+		ClearAttackHitWindows();
 	}
 
 	if (ActiveAirToFloorAttackMontage)
@@ -1039,7 +1038,6 @@ void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
 		bCurrentUseAutomaticWeaponMotionHitWindow = true;
 		bAttackHitPending = true;
 		bAttackRegisteredHit = false;
-		HitEnemiesThisAttack.Empty();
 		BeginAttackHitWindow();
 		return;
 	}
@@ -1062,7 +1060,6 @@ void ASideScrollingCharacter::BeginGroundAttackTrace(int32 ComboStepIndex)
 	bCurrentUseAutomaticWeaponMotionHitWindow = true;
 	bAttackHitPending = true;
 	bAttackRegisteredHit = false;
-	HitEnemiesThisAttack.Empty();
 	BeginAttackHitWindow();
 }
 
@@ -1095,7 +1092,7 @@ void ASideScrollingCharacter::FinishGroundAttackAndStartSheathe(bool bStopActive
 
 	if (bAttackHitWindowActive)
 	{
-		EndAttackHitWindow();
+		ClearAttackHitWindows();
 	}
 
 	UAnimMontage* MontageToStop = ActiveGroundAttackMontage;
@@ -1142,7 +1139,7 @@ void ASideScrollingCharacter::FinishGroundAttackMontageState(bool bInterrupted)
 {
 	if (bAttackHitWindowActive)
 	{
-		EndAttackHitWindow();
+		ClearAttackHitWindows();
 	}
 
 	bGroundAttackMontageInProgress = false;
@@ -1176,15 +1173,23 @@ void ASideScrollingCharacter::ApplyPendingAttackHit()
 	}
 
 	bAttackHitPending = false;
-	const float FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
 
 	bool bTraceAttempted = false;
-	if (bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(FacingSign, bTraceAttempted))
+	FActiveAttackHitWindow AttackWindow;
+	AttackWindow.FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
+	AttackWindow.DamageMultiplier = CurrentAttackDamageMultiplier;
+	AttackWindow.KnockbackDistance = CurrentAttackKnockbackDistance;
+	AttackWindow.WeaponTraceRadius = CurrentWeaponTraceRadius;
+	AttackWindow.MinimumWeaponMotionSpeed = CurrentMinimumWeaponMotionSpeed;
+	AttackWindow.bUseAutomaticWeaponMotionHitWindow = false;
+	AttackWindow.bForceCurrentSegmentHit = true;
+
+	if (bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(AttackWindow, bTraceAttempted))
 	{
 		return;
 	}
 
-	if (!bTraceAttempted && ApplyFallbackBoxAttackHit(FacingSign))
+	if (!bTraceAttempted && ApplyFallbackBoxAttackHit(AttackWindow))
 	{
 		return;
 	}
@@ -1202,52 +1207,108 @@ void ASideScrollingCharacter::BeginAttackHitWindow()
 		return;
 	}
 
+	FActiveAttackHitWindow& AttackWindow = ActiveAttackHitWindows.AddDefaulted_GetRef();
+	AttackWindow.FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
+	AttackWindow.DamageMultiplier = CurrentAttackDamageMultiplier;
+	AttackWindow.KnockbackDistance = CurrentAttackKnockbackDistance;
+	AttackWindow.WeaponTraceRadius = CurrentWeaponTraceRadius;
+	AttackWindow.MinimumWeaponMotionSpeed = CurrentMinimumWeaponMotionSpeed;
+	AttackWindow.bUseAutomaticWeaponMotionHitWindow = bCurrentUseAutomaticWeaponMotionHitWindow;
+
 	bAttackHitWindowActive = true;
-	bHasPreviousWeaponTrace = false;
-	UpdateAttackHitWindow();
+	bAttackHitPending = true;
 }
 
 void ASideScrollingCharacter::EndAttackHitWindow()
 {
-	if (!bAttackHitWindowActive && !bAttackHitPending)
+	if (ActiveAttackHitWindows.Num() <= 0)
 	{
+		RefreshAttackHitWindowState();
 		return;
 	}
 
-	bAttackHitWindowActive = false;
-	bHasPreviousWeaponTrace = false;
-
-	if (bAttackHitPending)
+	for (FActiveAttackHitWindow& AttackWindow : ActiveAttackHitWindows)
 	{
-		bAttackHitPending = false;
-		if (!bAttackRegisteredHit && bShowGameplayDebugMessages && GEngine)
+		AttackWindow.bForceCurrentSegmentHit = true;
+	}
+
+	UpdateAttackHitWindow();
+	if (ActiveAttackHitWindows.Num() <= 0)
+	{
+		RefreshAttackHitWindowState();
+		return;
+	}
+
+	if (!ActiveAttackHitWindows[0].bRegisteredHit && bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+	}
+	ActiveAttackHitWindows.RemoveAt(0);
+	FlushDeferredAttackKnockbacks();
+	RefreshAttackHitWindowState();
+}
+
+void ASideScrollingCharacter::ClearAttackHitWindows(bool bReportMisses)
+{
+	if (bReportMisses && bShowGameplayDebugMessages && GEngine)
+	{
+		for (const FActiveAttackHitWindow& AttackWindow : ActiveAttackHitWindows)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+			if (!AttackWindow.bRegisteredHit)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Silver, TEXT("Attack missed"));
+			}
 		}
+	}
+
+	ActiveAttackHitWindows.Empty();
+	DeferredAttackKnockbacks.Empty();
+	RefreshAttackHitWindowState();
+}
+
+void ASideScrollingCharacter::RefreshAttackHitWindowState()
+{
+	bAttackHitWindowActive = ActiveAttackHitWindows.Num() > 0;
+	bAttackHitPending = bAttackHitWindowActive;
+	bAttackRegisteredHit = false;
+	for (const FActiveAttackHitWindow& AttackWindow : ActiveAttackHitWindows)
+	{
+		bAttackRegisteredHit |= AttackWindow.bRegisteredHit;
 	}
 }
 
 void ASideScrollingCharacter::UpdateAttackHitWindow()
 {
-	if (!bAttackHitPending || !bAttackHitWindowActive)
+	if (ActiveAttackHitWindows.Num() <= 0)
 	{
+		RefreshAttackHitWindowState();
 		return;
 	}
 
-	bool bTraceAttempted = false;
-	const float FacingSign = PendingAttackFacingSign >= 0.0f ? 1.0f : -1.0f;
-	const bool bHit = bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(FacingSign, bTraceAttempted);
-	if (bHit)
+	bDeferAttackKnockback = true;
+	DeferredAttackKnockbacks.Reset();
+	for (int32 WindowIndex = ActiveAttackHitWindows.Num() - 1; WindowIndex >= 0; --WindowIndex)
 	{
-		bAttackRegisteredHit = true;
-	}
+		FActiveAttackHitWindow& AttackWindow = ActiveAttackHitWindows[WindowIndex];
+		bool bTraceAttempted = false;
+		if (bUseWeaponTraceForAttack && ApplyWeaponTraceAttackHit(AttackWindow, bTraceAttempted))
+		{
+			AttackWindow.bRegisteredHit = true;
+		}
 
-	if (!bTraceAttempted)
-	{
-		bAttackHitWindowActive = false;
-		bHasPreviousWeaponTrace = false;
-		ApplyPendingAttackHit();
+		if (!bTraceAttempted)
+		{
+			if (ApplyFallbackBoxAttackHit(AttackWindow))
+			{
+				AttackWindow.bRegisteredHit = true;
+			}
+			ActiveAttackHitWindows.RemoveAt(WindowIndex);
+		}
 	}
+	bDeferAttackKnockback = false;
+
+	FlushDeferredAttackKnockbacks();
+	RefreshAttackHitWindowState();
 }
 
 USceneComponent* ASideScrollingCharacter::FindSceneComponentByName(FName ComponentName) const
@@ -1291,7 +1352,7 @@ bool ASideScrollingCharacter::ResolveWeaponTraceComponents(USceneComponent*& Out
 	return OutTraceStartComponent && OutTraceEndComponent;
 }
 
-bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted)
+bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(FActiveAttackHitWindow& AttackWindow, bool& bOutTraceAttempted)
 {
 	bOutTraceAttempted = false;
 
@@ -1311,13 +1372,13 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 	const FVector TraceStart = TraceStartComponent->GetComponentLocation();
 	const FVector TraceEnd = TraceEndComponent->GetComponentLocation();
 	const float DeltaSeconds = FMath::Max(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0f, KINDA_SMALL_NUMBER);
-	const float WeaponMotionSpeed = bHasPreviousWeaponTrace
-		? FMath::Max(FVector::Dist(PreviousWeaponTraceStart, TraceStart), FVector::Dist(PreviousWeaponTraceEnd, TraceEnd)) / DeltaSeconds
+	const float WeaponMotionSpeed = AttackWindow.bHasPreviousWeaponTrace
+		? FMath::Max(FVector::Dist(AttackWindow.PreviousWeaponTraceStart, TraceStart), FVector::Dist(AttackWindow.PreviousWeaponTraceEnd, TraceEnd)) / DeltaSeconds
 		: 0.0f;
-	const bool bWeaponMovingFastEnough = !bCurrentUseAutomaticWeaponMotionHitWindow || (bHasPreviousWeaponTrace && WeaponMotionSpeed >= CurrentMinimumWeaponMotionSpeed);
+	const bool bWeaponMovingFastEnough = AttackWindow.bForceCurrentSegmentHit || !AttackWindow.bUseAutomaticWeaponMotionHitWindow || (AttackWindow.bHasPreviousWeaponTrace && WeaponMotionSpeed >= AttackWindow.MinimumWeaponMotionSpeed);
 
 	FCollisionShape TraceShape;
-	TraceShape.SetSphere(CurrentWeaponTraceRadius);
+	TraceShape.SetSphere(AttackWindow.WeaponTraceRadius);
 
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
@@ -1332,7 +1393,7 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 		for (const FHitResult& HitResult : HitResults)
 		{
 			AModengEnemy* Enemy = Cast<AModengEnemy>(HitResult.GetActor());
-			if (!Enemy || Enemy->IsDead() || HitEnemiesThisAttack.Contains(Enemy))
+			if (!Enemy || Enemy->IsDead() || AttackWindow.HitEnemies.Contains(Enemy))
 			{
 				continue;
 			}
@@ -1346,7 +1407,7 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 
 			if (bDrawWeaponTraceDebug)
 			{
-				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, CurrentWeaponTraceRadius * 0.6f, 12, WeaponTraceDebugHitColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+				DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, AttackWindow.WeaponTraceRadius * 0.6f, 12, WeaponTraceDebugHitColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
 			}
 		}
 	};
@@ -1362,38 +1423,39 @@ bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& 
 		{
 			const FColor SegmentColor = !bWeaponMovingFastEnough ? FColor::Silver : (HitResults.Num() > 0 ? WeaponTraceDebugHitColor : WeaponTraceDebugColor);
 			DrawDebugLine(GetWorld(), Start, End, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
-			DrawDebugSphere(GetWorld(), Start, CurrentWeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
-			DrawDebugSphere(GetWorld(), End, CurrentWeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+			DrawDebugSphere(GetWorld(), Start, AttackWindow.WeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
+			DrawDebugSphere(GetWorld(), End, AttackWindow.WeaponTraceRadius, 12, SegmentColor, false, WeaponTraceDebugDuration, 0, WeaponTraceDebugLineThickness);
 		}
 		CollectClosestEnemy(HitResults, Start);
 	};
 
 	SweepWeaponSegment(TraceStart, TraceEnd);
-	if (bHasPreviousWeaponTrace && bWeaponMovingFastEnough)
+	if (AttackWindow.bHasPreviousWeaponTrace && bWeaponMovingFastEnough)
 	{
-		SweepWeaponSegment(PreviousWeaponTraceStart, TraceStart);
-		SweepWeaponSegment(PreviousWeaponTraceEnd, TraceEnd);
+		SweepWeaponSegment(AttackWindow.PreviousWeaponTraceStart, TraceStart);
+		SweepWeaponSegment(AttackWindow.PreviousWeaponTraceEnd, TraceEnd);
 	}
 
-	PreviousWeaponTraceStart = TraceStart;
-	PreviousWeaponTraceEnd = TraceEnd;
-	bHasPreviousWeaponTrace = true;
+	AttackWindow.PreviousWeaponTraceStart = TraceStart;
+	AttackWindow.PreviousWeaponTraceEnd = TraceEnd;
+	AttackWindow.bHasPreviousWeaponTrace = true;
+	AttackWindow.bForceCurrentSegmentHit = false;
 
 	if (!ClosestEnemy)
 	{
 		return false;
 	}
 
-	HitEnemiesThisAttack.Add(ClosestEnemy);
-	DamageEnemyFromAttack(ClosestEnemy, FacingSign);
+	AttackWindow.HitEnemies.Add(ClosestEnemy);
+	DamageEnemyFromAttack(ClosestEnemy, AttackWindow);
 	return true;
 }
 
-bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(float FacingSign)
+bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(FActiveAttackHitWindow& AttackWindow)
 {
 	const float CurrentRange = GetCurrentAttackRange();
 	const float CurrentRadius = GetCurrentAttackRadius();
-	const FVector AttackCenter = GetActorLocation() + FVector(FacingSign * CurrentRange * 0.5f, 0.0f, 35.0f);
+	const FVector AttackCenter = GetActorLocation() + FVector(AttackWindow.FacingSign * CurrentRange * 0.5f, 0.0f, 35.0f);
 
 	FCollisionShape AttackBox;
 	AttackBox.SetBox(FVector3f(CurrentRange * 0.5f, CurrentRadius, CurrentRadius));
@@ -1416,7 +1478,7 @@ bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(float FacingSign)
 	for (const FOverlapResult& OverlapResult : OverlapResults)
 	{
 		AModengEnemy* Enemy = Cast<AModengEnemy>(OverlapResult.GetActor());
-		if (!Enemy || Enemy->IsDead())
+		if (!Enemy || Enemy->IsDead() || AttackWindow.HitEnemies.Contains(Enemy))
 		{
 			continue;
 		}
@@ -1434,21 +1496,32 @@ bool ASideScrollingCharacter::ApplyFallbackBoxAttackHit(float FacingSign)
 		return false;
 	}
 
-	DamageEnemyFromAttack(ClosestEnemy, FacingSign);
+	AttackWindow.HitEnemies.Add(ClosestEnemy);
+	DamageEnemyFromAttack(ClosestEnemy, AttackWindow);
 	return true;
 }
 
-void ASideScrollingCharacter::DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign)
+void ASideScrollingCharacter::DamageEnemyFromAttack(AModengEnemy* Enemy, const FActiveAttackHitWindow& AttackWindow)
 {
 	if (!Enemy || Enemy->IsDead())
 	{
 		return;
 	}
 
-	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage() * CurrentAttackDamageMultiplier, this);
+	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage() * AttackWindow.DamageMultiplier, this);
 	if (!Enemy->IsDead())
 	{
-		Enemy->AddActorWorldOffset(FVector(FacingSign * CurrentAttackKnockbackDistance, 0.0f, 0.0f), false);
+		if (bDeferAttackKnockback)
+		{
+			FDeferredAttackKnockback& DeferredKnockback = DeferredAttackKnockbacks.AddDefaulted_GetRef();
+			DeferredKnockback.Enemy = Enemy;
+			DeferredKnockback.FacingSign = AttackWindow.FacingSign;
+			DeferredKnockback.Distance = AttackWindow.KnockbackDistance;
+		}
+		else
+		{
+			Enemy->AddActorWorldOffset(FVector(AttackWindow.FacingSign * AttackWindow.KnockbackDistance, 0.0f, 0.0f), false);
+		}
 	}
 
 	if (bShowGameplayDebugMessages && GEngine)
@@ -1608,7 +1681,10 @@ void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
 {
 	if (bUseSkillWeaponTrace)
 	{
-		bHasPreviousWeaponTrace = false;
+		for (FActiveAttackHitWindow& AttackWindow : ActiveAttackHitWindows)
+		{
+			AttackWindow.bHasPreviousWeaponTrace = false;
+		}
 	}
 	bUseSkillWeaponTrace = false;
 
@@ -1683,6 +1759,20 @@ void ASideScrollingCharacter::SetAnimationWeaponModeForNotify(bool bUseSkeletalW
 	}
 }
 
+void ASideScrollingCharacter::FlushDeferredAttackKnockbacks()
+{
+	for (const FDeferredAttackKnockback& DeferredKnockback : DeferredAttackKnockbacks)
+	{
+		AModengEnemy* Enemy = DeferredKnockback.Enemy.Get();
+		if (Enemy && !Enemy->IsDead())
+		{
+			Enemy->AddActorWorldOffset(FVector(DeferredKnockback.FacingSign * DeferredKnockback.Distance, 0.0f, 0.0f), false);
+		}
+	}
+
+	DeferredAttackKnockbacks.Empty();
+}
+
 void ASideScrollingCharacter::SetSkillWeaponModeForNotify(FName WeaponModeName, FName NormalHandComponentName, FName SkillHandComponentName, FName BoneComponentName)
 {
 	if (WeaponModeName == FName(TEXT("InScabbard")) || WeaponModeName == FName(TEXT("Sheathed")))
@@ -1697,7 +1787,10 @@ void ASideScrollingCharacter::SetSkillWeaponModeForNotify(FName WeaponModeName, 
 	const bool bShouldUseSkillWeaponTrace = bSkillHand;
 	if (bUseSkillWeaponTrace != bShouldUseSkillWeaponTrace)
 	{
-		bHasPreviousWeaponTrace = false;
+		for (FActiveAttackHitWindow& AttackWindow : ActiveAttackHitWindows)
+		{
+			AttackWindow.bHasPreviousWeaponTrace = false;
+		}
 	}
 	bUseSkillWeaponTrace = bShouldUseSkillWeaponTrace;
 
@@ -1738,7 +1831,7 @@ bool ASideScrollingCharacter::PlayHitReaction(AActor* DamageSource)
 
 	if (bAttackHitWindowActive)
 	{
-		EndAttackHitWindow();
+		ClearAttackHitWindows();
 	}
 
 	if (ActiveGroundAttackMontage)
@@ -2203,7 +2296,7 @@ void ASideScrollingCharacter::FinishAttackAnimation()
 
 	if (bAttackHitWindowActive)
 	{
-		EndAttackHitWindow();
+		ClearAttackHitWindows();
 	}
 	else if (bAttackHitPending)
 	{
@@ -2269,10 +2362,7 @@ void ASideScrollingCharacter::InterruptAttackAnimation()
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
 	GetWorld()->GetTimerManager().ClearTimer(SkillReleaseTimer);
 	StopActiveSkillMontage(0.04f);
-	bAttackHitWindowActive = false;
-	bHasPreviousWeaponTrace = false;
-	HitEnemiesThisAttack.Empty();
-	bAttackHitPending = false;
+	ClearAttackHitWindows();
 	bComboInputQueued = false;
 	bAirToFloorAttackInProgress = false;
 	bRollInProgress = false;
