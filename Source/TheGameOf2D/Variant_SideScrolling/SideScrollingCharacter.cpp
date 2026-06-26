@@ -1271,13 +1271,33 @@ USceneComponent* ASideScrollingCharacter::FindSceneComponentByName(FName Compone
 	return nullptr;
 }
 
+bool ASideScrollingCharacter::ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const
+{
+	OutTraceStartComponent = nullptr;
+	OutTraceEndComponent = nullptr;
+
+	if (bUseSkillWeaponTrace)
+	{
+		OutTraceStartComponent = FindSceneComponentByName(SkillWeaponTraceStartComponentName);
+		OutTraceEndComponent = FindSceneComponentByName(SkillWeaponTraceEndComponentName);
+		if (OutTraceStartComponent && OutTraceEndComponent)
+		{
+			return true;
+		}
+	}
+
+	OutTraceStartComponent = FindSceneComponentByName(WeaponTraceStartComponentName);
+	OutTraceEndComponent = FindSceneComponentByName(WeaponTraceEndComponentName);
+	return OutTraceStartComponent && OutTraceEndComponent;
+}
+
 bool ASideScrollingCharacter::ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted)
 {
 	bOutTraceAttempted = false;
 
-	USceneComponent* TraceStartComponent = FindSceneComponentByName(WeaponTraceStartComponentName);
-	USceneComponent* TraceEndComponent = FindSceneComponentByName(WeaponTraceEndComponentName);
-	if (!TraceStartComponent || !TraceEndComponent)
+	USceneComponent* TraceStartComponent = nullptr;
+	USceneComponent* TraceEndComponent = nullptr;
+	if (!ResolveWeaponTraceComponents(TraceStartComponent, TraceEndComponent))
 	{
 		if (bShowGameplayDebugMessages && GEngine)
 		{
@@ -1586,6 +1606,12 @@ void ASideScrollingCharacter::OnCombatTransitionMontageEnded(UAnimMontage* Monta
 
 void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
 {
+	if (bUseSkillWeaponTrace)
+	{
+		bHasPreviousWeaponTrace = false;
+	}
+	bUseSkillWeaponTrace = false;
+
 	if (USceneComponent* HandSword = FindSceneComponentByName(TEXT("Sword_Hand")))
 	{
 		HandSword->SetVisibility(bDrawn, true);
@@ -1668,6 +1694,12 @@ void ASideScrollingCharacter::SetSkillWeaponModeForNotify(FName WeaponModeName, 
 	const bool bNormalHand = WeaponModeName == FName(TEXT("NormalHand"));
 	const bool bSkillHand = WeaponModeName == FName(TEXT("SkillHand"));
 	const bool bBone = WeaponModeName == FName(TEXT("SwordBone")) || WeaponModeName == FName(TEXT("Bone"));
+	const bool bShouldUseSkillWeaponTrace = bSkillHand;
+	if (bUseSkillWeaponTrace != bShouldUseSkillWeaponTrace)
+	{
+		bHasPreviousWeaponTrace = false;
+	}
+	bUseSkillWeaponTrace = bShouldUseSkillWeaponTrace;
 
 	if (USceneComponent* NormalHand = FindSceneComponentByName(NormalHandComponentName))
 	{

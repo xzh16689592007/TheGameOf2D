@@ -219,6 +219,12 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
 	FName WeaponTraceEndComponentName = TEXT("KatanaTraceEnd");
 
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	FName SkillWeaponTraceStartComponentName = TEXT("SkillKatanaTraceStart");
+
+	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat")
+	FName SkillWeaponTraceEndComponentName = TEXT("SkillKatanaTraceEnd");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
 
@@ -364,6 +370,7 @@ protected:
 	bool bHasPreviousWeaponTrace = false;
 	bool bAttackRegisteredHit = false;
 	bool bComboInputQueued = false;
+	bool bUseSkillWeaponTrace = false;
 	bool bGroundAttackMontageInProgress = false;
 	bool bGroundComboInputWindowOpen = false;
 	bool bGroundMoveCancelWindowOpen = false;
@@ -586,6 +593,7 @@ protected:
 	void ResetAttackCombo();
 	void UpdateFacingDirection(float FacingSign);
 	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
+	bool ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const;
 	bool ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted);
 	bool ApplyFallbackBoxAttackHit(float FacingSign);
 	void DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign);
