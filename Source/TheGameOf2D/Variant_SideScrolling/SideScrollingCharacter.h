@@ -274,6 +274,24 @@ protected:
 	TObjectPtr<UAnimMontage> SkillMontage = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> NumberSkill1Animation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> NumberSkill1Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> NumberSkill2Animation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> NumberSkill2Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> NumberSkill3Animation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> NumberSkill3Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
 	FName SkillSlotName = TEXT("GroundAttackSlot");
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill", meta = (ClampMin = "0.1"))
@@ -385,6 +403,7 @@ protected:
 	float CurrentWeaponTraceRadius = 24.0f;
 	float CurrentMinimumWeaponMotionSpeed = 180.0f;
 	int32 CurrentGroundComboStep = 0;
+	int32 ActiveSkillIndex = 0;
 	ESideScrollingCombatAnimationPhase CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
@@ -500,15 +519,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoSkill();
 
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill1();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill2();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill3();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkillByIndex(int32 SkillIndex);
+
 	UFUNCTION(BlueprintPure, Category="Input")
 	bool IsSkillReleaseInProgress() const;
+
+	UFUNCTION(BlueprintPure, Category="Input")
+	int32 GetActiveSkillIndex() const;
 
 	/** Event hook for Blueprint skill animation/gameplay setup */
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void OnSkillInputPressed();
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void OnSkillInputPressedByIndex(int32 SkillIndex);
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void OnSkillReleaseFinished();
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void OnSkillReleaseFinishedByIndex(int32 SkillIndex);
 
 	/** Handles basic attack inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
@@ -538,6 +578,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetCurrentAttackRadius() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
+	float GetSideScrollingFacingSign() const;
 
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
 	bool ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource = nullptr);
@@ -595,9 +638,11 @@ protected:
 	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void ClearDamageInvulnerability();
 	bool CanStartSkill() const;
-	void StartSkillRelease();
+	void StartSkillRelease(int32 SkillIndex);
 	void FinishSkillRelease();
-	float PlaySkillReleaseAnimation();
+	float PlaySkillReleaseAnimation(int32 SkillIndex);
+	UAnimSequenceBase* GetSkillAnimationForIndex(int32 SkillIndex) const;
+	UAnimMontage* GetSkillMontageForIndex(int32 SkillIndex) const;
 	void StopActiveSkillMontage(float BlendOutTime);
 	void OnSkillMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted);
@@ -617,6 +662,7 @@ protected:
 	void InterruptAttackAnimation();
 	void ResetAttackCombo();
 	void UpdateFacingDirection(float FacingSign);
+	void RefreshSwordInScabbardVisibility();
 	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
 	bool ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const;
 	bool ApplyWeaponTraceAttackHit(FActiveAttackHitWindow& AttackWindow, bool& bOutTraceAttempted);

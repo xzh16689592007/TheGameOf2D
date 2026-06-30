@@ -3,7 +3,7 @@
 ## Project Basics
 
 - Original project path used in earlier handoffs: `D:\UE_project\TheGameOf2D`
-- Current local path used for this handoff: `C:\Users\26474\Documents\Unreal Projects\TheGameOf2D`
+- Current local path used for this handoff: `D:\UE_project\TheGameOf2D`
 - Unreal project file: `TheGameOf2D.uproject`
 - Engine: Unreal Engine 5.7
 - GitHub repo: `https://github.com/xzh16689592007/TheGameOf2D`
@@ -66,6 +66,11 @@
     - `M_Lightning.uasset`, `M_Flare.uasset`, and `M_Sprite.uasset` are available for future lightning, flash, or sprite particles.
   - `Content/FX/Particles/Textures`
     - Useful trail textures include `T_Lightning`, `T_Tile_Noise_Tendril_01`, and `T_Turbulence_Seamless`.
+- Imported slash VFX folder:
+  - `Content/NiagaraMagicalSlashes`
+    - Added locally for sword slash, sword trail, stab, water/fire/lava, and circular slash effect references.
+    - Useful starting points are under `Content/NiagaraMagicalSlashes/Fx/Slashes` and `Content/NiagaraMagicalSlashes/Fx/SwordTrail`.
+    - The folder also includes demo maps, demo mannequins, materials, textures, and meshes from the source pack; keep gameplay references pointed at the specific effect assets used by Tomoe skills.
 - Imported projectile / spell VFX folders:
   - `Content/PewPewPack`
     - Added in commit `8e67129`.
@@ -658,12 +663,26 @@ Current player update in this handoff:
   - `SkillAnimation` / `SkillMontage` / `SkillSlotName` are exposed on `BP_SideScrollingCharacter`; prefer setting the skill sequence on `SkillAnimation` and leaving `SkillMontage` empty while tuning notifies.
   - Added native `SideScrollingAnimNotify_SetSkillWeaponMode` with `SkillHand`, `SwordBone`, and `InScabbard` modes for the authored skill weapon handoff.
   - Current skill weapon component plan: normal combat uses `Sword_Hand`; skill startup uses `Sword_SkillHand`; skill turning section uses `Sword_Bone`; skill end returns to `Sword_InScabbard`.
+- Added separate number-key skill entry points:
+  - `E` still uses the original skill slot/index `0`.
+  - `1`, `2`, and `3` now call independent skill indexes `1`, `2`, and `3`.
+  - `NumberSkill1Animation/Montage`, `NumberSkill2Animation/Montage`, and `NumberSkill3Animation/Montage` are exposed on `BP_SideScrollingCharacter`.
+  - Number-key skills intentionally do not fall back to the E skill asset; assign their own animation or montage before testing.
+- Added `Area Slash Hitboxes` as a native `AnimNotifyState` for authored area attacks:
+  - Supports box, sphere, and capsule hitboxes with per-shape timing, local offset/rotation, damage multiplier, and knockback.
+  - Hit policies are `OncePerNotify`, `OncePerShape`, and `EveryTick`.
+  - Can mirror local offsets by character facing and optionally use a reference bone/socket transform.
+  - Useful for the current sword-in-ground / spherical slash skill prototype; place it on the skill animation where the area damage should exist.
+- Added the current skill animation asset `Content/MoDeng/Animations/Tomoe/Attack/Skill/AS_Execution_01_Seq.uasset` and imported `Content/NiagaraMagicalSlashes` as the reference VFX pack for slash/trail skill effects.
+- Weapon visibility remains mode-based through the existing `SideScrollingAnimNotify_SetSkillWeaponMode` notify.
+  - `Sword_Sheathed` is the scabbard and remains visible.
+  - `Sword_InScabbard` is now automatically hidden whenever `Sword_Hand`, `Sword_SkillHand`, or `Sword_Bone` is visible, preventing a drawn sword and sheathed sword from appearing at the same time.
 - Added Blender helper scripts under `Tools/Blender` for experimenting with current-action/root-motion editing:
   - `scale_root_motion.py`
   - `edit_current_action_root_motion.py`
   - `rewrite_fbx_root_motion.py`
   - These are workflow helpers only; verify edited animations in Blender/UE before replacing project assets.
-- A full build after these C++ changes succeeded on 2026-06-25 with:
+- A full build after these C++ changes succeeded on 2026-06-30 with:
   - `Result: Succeeded`
 - `outputs/` and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
 

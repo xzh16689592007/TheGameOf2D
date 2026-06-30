@@ -200,6 +200,8 @@ void ASideScrollingCharacter::BeginPlay()
 		Scabbard->SetVisibility(true, true);
 		Scabbard->SetHiddenInGame(false, true);
 	}
+
+	RefreshSwordInScabbardVisibility();
 }
 
 void ASideScrollingCharacter::Tick(float DeltaSeconds)
@@ -251,6 +253,9 @@ void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* P
 	PlayerInputComponent->BindKey(EKeys::J, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
 	PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoRoll);
+	PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &ASideScrollingCharacter::DoSkill1);
+	PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ASideScrollingCharacter::DoSkill2);
+	PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ASideScrollingCharacter::DoSkill3);
 }
 
 void ASideScrollingCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
@@ -514,22 +519,49 @@ void ASideScrollingCharacter::DoInteract()
 
 void ASideScrollingCharacter::DoSkill()
 {
+	DoSkillByIndex(0);
+}
+
+void ASideScrollingCharacter::DoSkill1()
+{
+	DoSkillByIndex(1);
+}
+
+void ASideScrollingCharacter::DoSkill2()
+{
+	DoSkillByIndex(2);
+}
+
+void ASideScrollingCharacter::DoSkill3()
+{
+	DoSkillByIndex(3);
+}
+
+void ASideScrollingCharacter::DoSkillByIndex(int32 SkillIndex)
+{
 	if (!CanStartSkill())
 	{
 		return;
 	}
 
+	const int32 ClampedSkillIndex = FMath::Clamp(SkillIndex, 0, 3);
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Purple, TEXT("Skill pressed"));
+		const FString SkillName = ClampedSkillIndex == 0 ? TEXT("E") : FString::FromInt(ClampedSkillIndex);
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Purple, FString::Printf(TEXT("Skill %s pressed"), *SkillName));
 	}
 
-	StartSkillRelease();
+	StartSkillRelease(ClampedSkillIndex);
 }
 
 bool ASideScrollingCharacter::IsSkillReleaseInProgress() const
 {
 	return bSkillReleaseInProgress;
+}
+
+int32 ASideScrollingCharacter::GetActiveSkillIndex() const
+{
+	return ActiveSkillIndex;
 }
 
 void ASideScrollingCharacter::DoAttack()
@@ -1332,6 +1364,29 @@ USceneComponent* ASideScrollingCharacter::FindSceneComponentByName(FName Compone
 	return nullptr;
 }
 
+void ASideScrollingCharacter::RefreshSwordInScabbardVisibility()
+{
+	USceneComponent* HandSword = FindSceneComponentByName(TEXT("Sword_Hand"));
+	USceneComponent* SkillHandSword = FindSceneComponentByName(TEXT("Sword_SkillHand"));
+	USceneComponent* BoneSword = FindSceneComponentByName(TEXT("Sword_Bone"));
+	USceneComponent* SheathedSword = FindSceneComponentByName(TEXT("Sword_InScabbard"));
+	if (!SheathedSword)
+	{
+		return;
+	}
+
+	const bool bAnyDrawnSwordVisible =
+		(HandSword && HandSword->IsVisible() && !HandSword->bHiddenInGame)
+		|| (SkillHandSword && SkillHandSword->IsVisible() && !SkillHandSword->bHiddenInGame)
+		|| (BoneSword && BoneSword->IsVisible() && !BoneSword->bHiddenInGame);
+
+	if (bAnyDrawnSwordVisible)
+	{
+		SheathedSword->SetVisibility(false, true);
+		SheathedSword->SetHiddenInGame(true, true);
+	}
+}
+
 bool ASideScrollingCharacter::ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const
 {
 	OutTraceStartComponent = nullptr;
@@ -1717,6 +1772,8 @@ void ASideScrollingCharacter::SetCombatWeaponDrawn(bool bDrawn)
 		Scabbard->SetVisibility(true, true);
 		Scabbard->SetHiddenInGame(false, true);
 	}
+
+	RefreshSwordInScabbardVisibility();
 }
 
 bool ASideScrollingCharacter::SetSceneComponentVisibleByName(FName ComponentName, bool bVisible, bool bPropagateToChildren)
@@ -1757,6 +1814,8 @@ void ASideScrollingCharacter::SetAnimationWeaponModeForNotify(bool bUseSkeletalW
 	{
 		SetSceneComponentVisibleByName(SocketWeaponComponentName, !bUseSkeletalWeapon && !bUseSheathedWeapon, true);
 	}
+
+	RefreshSwordInScabbardVisibility();
 }
 
 void ASideScrollingCharacter::FlushDeferredAttackKnockbacks()
@@ -1811,6 +1870,8 @@ void ASideScrollingCharacter::SetSkillWeaponModeForNotify(FName WeaponModeName, 
 		Bone->SetVisibility(bBone, true);
 		Bone->SetHiddenInGame(!bBone, true);
 	}
+
+	RefreshSwordInScabbardVisibility();
 }
 
 bool ASideScrollingCharacter::PlayHitReaction(AActor* DamageSource)
@@ -1990,7 +2051,7 @@ bool ASideScrollingCharacter::CanStartSkill() const
 		&& !bIsFalling;
 }
 
-void ASideScrollingCharacter::StartSkillRelease()
+void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 {
 	if (!CanStartSkill())
 	{
@@ -2021,6 +2082,7 @@ void ASideScrollingCharacter::StartSkillRelease()
 	}
 
 	bSkillReleaseInProgress = true;
+	ActiveSkillIndex = FMath::Clamp(SkillIndex, 0, 3);
 	ActionValueY = 0.0f;
 	DropValue = 0.0f;
 	MeshTransformBeforeAttackAnimation = GetMesh() ? GetMesh()->GetRelativeTransform() : MeshTransformBeforeAttackAnimation;
@@ -2031,8 +2093,9 @@ void ASideScrollingCharacter::StartSkillRelease()
 	}
 
 	OnSkillInputPressed();
+	OnSkillInputPressedByIndex(ActiveSkillIndex);
 
-	const float AnimationDuration = PlaySkillReleaseAnimation();
+	const float AnimationDuration = PlaySkillReleaseAnimation(ActiveSkillIndex);
 	const float SafeReleaseDuration = AnimationDuration > 0.0f ? AnimationDuration : FMath::Max(SkillReleaseDuration, 0.0f);
 	if (SafeReleaseDuration > 0.0f)
 	{
@@ -2052,13 +2115,16 @@ void ASideScrollingCharacter::FinishSkillRelease()
 		return;
 	}
 
+	const int32 FinishedSkillIndex = ActiveSkillIndex;
 	StopActiveSkillMontage(SkillBlendOutTime);
 	SetSkillWeaponModeForNotify(TEXT("InScabbard"));
 	bSkillReleaseInProgress = false;
+	ActiveSkillIndex = 0;
 	OnSkillReleaseFinished();
+	OnSkillReleaseFinishedByIndex(FinishedSkillIndex);
 }
 
-float ASideScrollingCharacter::PlaySkillReleaseAnimation()
+float ASideScrollingCharacter::PlaySkillReleaseAnimation(int32 SkillIndex)
 {
 	USkeletalMeshComponent* CharacterMesh = GetMesh();
 	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
@@ -2070,7 +2136,9 @@ float ASideScrollingCharacter::PlaySkillReleaseAnimation()
 	StopActiveSkillMontage(0.0f);
 
 	const float SafePlayRate = FMath::Max(SkillPlayRate, 0.1f);
-	const bool bSkillMontageUsesExpectedSlot = SkillMontage && SkillMontage->SlotAnimTracks.ContainsByPredicate(
+	UAnimMontage* SelectedSkillMontage = GetSkillMontageForIndex(SkillIndex);
+	UAnimSequenceBase* SelectedSkillAnimation = GetSkillAnimationForIndex(SkillIndex);
+	const bool bSkillMontageUsesExpectedSlot = SelectedSkillMontage && SelectedSkillMontage->SlotAnimTracks.ContainsByPredicate(
 		[this](const FSlotAnimationTrack& SlotTrack)
 		{
 			return SlotTrack.SlotName == SkillSlotName;
@@ -2079,7 +2147,7 @@ float ASideScrollingCharacter::PlaySkillReleaseAnimation()
 	float Duration = 0.0f;
 	if (bSkillMontageUsesExpectedSlot)
 	{
-		ActiveSkillMontage = SkillMontage.Get();
+		ActiveSkillMontage = SelectedSkillMontage;
 		Duration = AnimInstance->Montage_Play(ActiveSkillMontage, SafePlayRate);
 		if (Duration <= 0.0f)
 		{
@@ -2087,16 +2155,16 @@ float ASideScrollingCharacter::PlaySkillReleaseAnimation()
 		}
 	}
 
-	if (!ActiveSkillMontage && SkillAnimation)
+	if (!ActiveSkillMontage && SelectedSkillAnimation)
 	{
 		ActiveSkillMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
-			SkillAnimation.Get(),
+			SelectedSkillAnimation,
 			SkillSlotName,
 			FMath::Max(SkillBlendInTime, 0.0f),
 			FMath::Max(SkillBlendOutTime, 0.0f),
 			SafePlayRate);
 
-		Duration = ActiveSkillMontage ? SkillAnimation->GetPlayLength() / SafePlayRate : 0.0f;
+		Duration = ActiveSkillMontage ? SelectedSkillAnimation->GetPlayLength() / SafePlayRate : 0.0f;
 	}
 
 	if (ActiveSkillMontage)
@@ -2111,6 +2179,40 @@ float ASideScrollingCharacter::PlaySkillReleaseAnimation()
 	}
 
 	return Duration;
+}
+
+UAnimSequenceBase* ASideScrollingCharacter::GetSkillAnimationForIndex(int32 SkillIndex) const
+{
+	switch (FMath::Clamp(SkillIndex, 0, 3))
+	{
+	case 0:
+		return SkillAnimation.Get();
+	case 1:
+		return NumberSkill1Animation.Get();
+	case 2:
+		return NumberSkill2Animation.Get();
+	case 3:
+		return NumberSkill3Animation.Get();
+	default:
+		return nullptr;
+	}
+}
+
+UAnimMontage* ASideScrollingCharacter::GetSkillMontageForIndex(int32 SkillIndex) const
+{
+	switch (FMath::Clamp(SkillIndex, 0, 3))
+	{
+	case 0:
+		return SkillMontage.Get();
+	case 1:
+		return NumberSkill1Montage.Get();
+	case 2:
+		return NumberSkill2Montage.Get();
+	case 3:
+		return NumberSkill3Montage.Get();
+	default:
+		return nullptr;
+	}
 }
 
 void ASideScrollingCharacter::StopActiveSkillMontage(float BlendOutTime)
@@ -2339,6 +2441,7 @@ void ASideScrollingCharacter::RestorePlayerAnimationBlueprint()
 	bRollJumpQueued = false;
 	bRollPausedFalling = false;
 	bSkillReleaseInProgress = false;
+	ActiveSkillIndex = 0;
 	RollMoveQueuedValue = 0.0f;
 	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 
@@ -2371,6 +2474,7 @@ void ASideScrollingCharacter::InterruptAttackAnimation()
 	bRollAttackQueued = false;
 	bRollJumpQueued = false;
 	bSkillReleaseInProgress = false;
+	ActiveSkillIndex = 0;
 	RollMoveQueuedValue = 0.0f;
 	RestorePlayerAnimationBlueprint();
 	ResetAttackCombo();
@@ -2399,6 +2503,7 @@ void ASideScrollingCharacter::ResetAttackCombo()
 	bRollJumpQueued = false;
 	bRollPausedFalling = false;
 	bSkillReleaseInProgress = false;
+	ActiveSkillIndex = 0;
 	RollMoveQueuedValue = 0.0f;
 	ActiveGroundAttackMontage = nullptr;
 	ActiveAirToFloorAttackMontage = nullptr;
@@ -2483,6 +2588,11 @@ float ASideScrollingCharacter::GetCurrentAttackRange() const
 float ASideScrollingCharacter::GetCurrentAttackRadius() const
 {
 	return AttackRadius + RadiusGainPerWeaponLevel * (WeaponLevel - 1);
+}
+
+float ASideScrollingCharacter::GetSideScrollingFacingSign() const
+{
+	return LastFacingX >= 0.0f ? 1.0f : -1.0f;
 }
 
 bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource)
