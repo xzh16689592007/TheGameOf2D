@@ -268,12 +268,6 @@ protected:
 	bool bSkillGrantsInvulnerability = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
-	TObjectPtr<UAnimSequenceBase> SkillAnimation = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
-	TObjectPtr<UAnimMontage> SkillMontage = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
 	TObjectPtr<UAnimSequenceBase> NumberSkill1Animation = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
@@ -517,9 +511,6 @@ public:
 
 	/** Handles skill inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoSkill();
-
-	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoSkill1();
 
 	UFUNCTION(BlueprintCallable, Category="Input")
@@ -537,15 +528,8 @@ public:
 	UFUNCTION(BlueprintPure, Category="Input")
 	int32 GetActiveSkillIndex() const;
 
-	/** Event hook for Blueprint skill animation/gameplay setup */
-	UFUNCTION(BlueprintImplementableEvent, Category="Input")
-	void OnSkillInputPressed();
-
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void OnSkillInputPressedByIndex(int32 SkillIndex);
-
-	UFUNCTION(BlueprintImplementableEvent, Category="Input")
-	void OnSkillReleaseFinished();
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void OnSkillReleaseFinishedByIndex(int32 SkillIndex);

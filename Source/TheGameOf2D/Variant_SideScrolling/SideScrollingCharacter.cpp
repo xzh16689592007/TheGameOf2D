@@ -44,14 +44,14 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	GetMesh()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCastShadow(true);
 
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MannyMesh(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
-	if (MannyMesh.Succeeded())
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> TomoeMesh(TEXT("/Game/SamuraiGirlTomoe/Mesh/SK_SAMURAIGIRL_01.SK_SAMURAIGIRL_01"));
+	if (TomoeMesh.Succeeded())
 	{
-		PlayerSkeletalMesh = MannyMesh.Object;
+		PlayerSkeletalMesh = TomoeMesh.Object;
 		GetMesh()->SetSkeletalMesh(PlayerSkeletalMesh);
 	}
 
-	static ConstructorHelpers::FClassFinder<UAnimInstance> SideScrollerAnimClass(TEXT("/Game/Variant_SideScrolling/Anims/ABP_Manny_SideScroller"));
+	static ConstructorHelpers::FClassFinder<UAnimInstance> SideScrollerAnimClass(TEXT("/Game/MoDeng/Animations/Tomoe/ABP_Tomoe_SideScroller"));
 	if (SideScrollerAnimClass.Succeeded())
 	{
 		PlayerAnimClass = SideScrollerAnimClass.Class;
@@ -98,18 +98,6 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	if (RollMontageAsset.Succeeded())
 	{
 		RollMontage = RollMontageAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SkillAnimationAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Skill/AS_Combo_Attack_All_Seq.AS_Combo_Attack_All_Seq"));
-	if (SkillAnimationAsset.Succeeded())
-	{
-		SkillAnimation = SkillAnimationAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> SkillMontageAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Attack/Skill/AS_Combo_Attack_All_Seq_Montage.AS_Combo_Attack_All_Seq_Montage"));
-	if (SkillMontageAsset.Succeeded())
-	{
-		SkillMontage = SkillMontageAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> HitReactionAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Hit/Hit_F_Seq.Hit_F_Seq"));
@@ -517,11 +505,6 @@ void ASideScrollingCharacter::DoInteract()
 	}
 }
 
-void ASideScrollingCharacter::DoSkill()
-{
-	DoSkillByIndex(0);
-}
-
 void ASideScrollingCharacter::DoSkill1()
 {
 	DoSkillByIndex(1);
@@ -539,19 +522,22 @@ void ASideScrollingCharacter::DoSkill3()
 
 void ASideScrollingCharacter::DoSkillByIndex(int32 SkillIndex)
 {
+	if (SkillIndex < 1 || SkillIndex > 3)
+	{
+		return;
+	}
+
 	if (!CanStartSkill())
 	{
 		return;
 	}
 
-	const int32 ClampedSkillIndex = FMath::Clamp(SkillIndex, 0, 3);
 	if (bShowGameplayDebugMessages && GEngine)
 	{
-		const FString SkillName = ClampedSkillIndex == 0 ? TEXT("E") : FString::FromInt(ClampedSkillIndex);
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Purple, FString::Printf(TEXT("Skill %s pressed"), *SkillName));
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Purple, FString::Printf(TEXT("Skill %d pressed"), SkillIndex));
 	}
 
-	StartSkillRelease(ClampedSkillIndex);
+	StartSkillRelease(SkillIndex);
 }
 
 bool ASideScrollingCharacter::IsSkillReleaseInProgress() const
@@ -2053,6 +2039,11 @@ bool ASideScrollingCharacter::CanStartSkill() const
 
 void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 {
+	if (SkillIndex < 1 || SkillIndex > 3)
+	{
+		return;
+	}
+
 	if (!CanStartSkill())
 	{
 		return;
@@ -2082,7 +2073,7 @@ void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 	}
 
 	bSkillReleaseInProgress = true;
-	ActiveSkillIndex = FMath::Clamp(SkillIndex, 0, 3);
+	ActiveSkillIndex = SkillIndex;
 	ActionValueY = 0.0f;
 	DropValue = 0.0f;
 	MeshTransformBeforeAttackAnimation = GetMesh() ? GetMesh()->GetRelativeTransform() : MeshTransformBeforeAttackAnimation;
@@ -2092,7 +2083,6 @@ void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 		MovementComponent->StopMovementImmediately();
 	}
 
-	OnSkillInputPressed();
 	OnSkillInputPressedByIndex(ActiveSkillIndex);
 
 	const float AnimationDuration = PlaySkillReleaseAnimation(ActiveSkillIndex);
@@ -2120,7 +2110,6 @@ void ASideScrollingCharacter::FinishSkillRelease()
 	SetSkillWeaponModeForNotify(TEXT("InScabbard"));
 	bSkillReleaseInProgress = false;
 	ActiveSkillIndex = 0;
-	OnSkillReleaseFinished();
 	OnSkillReleaseFinishedByIndex(FinishedSkillIndex);
 }
 
@@ -2183,10 +2172,8 @@ float ASideScrollingCharacter::PlaySkillReleaseAnimation(int32 SkillIndex)
 
 UAnimSequenceBase* ASideScrollingCharacter::GetSkillAnimationForIndex(int32 SkillIndex) const
 {
-	switch (FMath::Clamp(SkillIndex, 0, 3))
+	switch (SkillIndex)
 	{
-	case 0:
-		return SkillAnimation.Get();
 	case 1:
 		return NumberSkill1Animation.Get();
 	case 2:
@@ -2200,10 +2187,8 @@ UAnimSequenceBase* ASideScrollingCharacter::GetSkillAnimationForIndex(int32 Skil
 
 UAnimMontage* ASideScrollingCharacter::GetSkillMontageForIndex(int32 SkillIndex) const
 {
-	switch (FMath::Clamp(SkillIndex, 0, 3))
+	switch (SkillIndex)
 	{
-	case 0:
-		return SkillMontage.Get();
 	case 1:
 		return NumberSkill1Montage.Get();
 	case 2:
