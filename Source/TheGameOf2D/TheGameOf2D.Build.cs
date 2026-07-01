@@ -20,6 +20,7 @@ public class TheGameOf2D : ModuleRules
 			"Niagara",
 			"LevelSequence",
 			"MovieScene",
+			"ImageWrapper",
 			"UMG",
 			"Slate",
 			"SlateCore"
