@@ -7,6 +7,7 @@
 #include "ModengEnemySpawner.generated.h"
 
 class AModengEnemy;
+class ASideScrollingCharacter;
 class UModengResultWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FModengGameEndedSignature, bool, bPlayerWon);
@@ -165,6 +166,8 @@ protected:
 	bool IsAnyCinematicPlaying() const;
 	void ApplyCurrentLevelDefaults();
 	void CheckWaveProgress();
+	UFUNCTION()
+	void HandlePlayerDeathAnimationFinished();
 	void EndGame(bool bPlayerWon);
 	void ShowResultWidget(bool bPlayerWon);
 	void ShowLevelCompleteWidget();

@@ -16,6 +16,8 @@ class USkeletalMesh;
 class AModengEnemy;
 struct FInputActionValue;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FSideScrollingPlayerDeathFinishedSignature);
+
 enum class ESideScrollingCombatAnimationPhase : uint8
 {
 	None,
@@ -246,6 +248,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit")
 	TObjectPtr<UAnimSequenceBase> HitReactionAnimation = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death")
+	TObjectPtr<UAnimSequenceBase> DeathAnimation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death")
+	TObjectPtr<UAnimMontage> DeathMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death")
+	FName DeathSlotName = TEXT("GroundAttackSlot");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death", meta = (ClampMin = "0.1"))
+	float DeathPlayRate = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death", meta = (ClampMin = "0.0"))
+	float DeathBlendInTime = 0.03f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death", meta = (ClampMin = "0.0"))
+	float DeathBlendOutTime = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Death", meta = (ClampMin = "0.0"))
+	float DeathResultDelay = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Hit")
 	FName HitReactionSlotName = TEXT("GroundAttackSlot");
 
@@ -393,6 +416,7 @@ protected:
 	FTimerHandle AttackHitWindowEndTimer;
 	FTimerHandle HitInvulnerabilityTimer;
 	FTimerHandle HitReactionTimer;
+	FTimerHandle DeathAnimationTimer;
 	FTimerHandle SkillReleaseTimer;
 
 	struct FActiveAttackHitWindow
@@ -455,6 +479,7 @@ protected:
 	UAnimMontage* ActiveAirToFloorAttackMontage = nullptr;
 	UAnimMontage* ActiveCombatTransitionMontage = nullptr;
 	UAnimMontage* ActiveHitReactionMontage = nullptr;
+	UAnimMontage* ActiveDeathMontage = nullptr;
 	UAnimMontage* ActiveRollMontage = nullptr;
 	UAnimMontage* ActiveSkillMontage = nullptr;
 
@@ -480,6 +505,7 @@ protected:
 	bool bSkillReleaseInProgress = false;
 	bool bDamageInvulnerable = false;
 	bool bPlayerDefeated = false;
+	bool bDeathAnimationFinished = false;
 
 public:
 	
@@ -632,6 +658,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
 	bool IsPlayerDefeated() const;
 
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
+	bool IsPlayerDeathAnimationFinished() const;
+
+	UPROPERTY(BlueprintAssignable, Category="Side Scrolling|Health")
+	FSideScrollingPlayerDeathFinishedSignature OnDeathAnimationFinished;
+
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Visuals")
 	bool SetSceneComponentVisibleByName(FName ComponentName, bool bVisible, bool bPropagateToChildren = true);
 
@@ -677,6 +709,9 @@ protected:
 	bool PlayHitReaction(AActor* DamageSource);
 	void FinishHitReaction();
 	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	bool PlayDeathAnimation(AActor* DamageSource);
+	void FinishDeathAnimation();
+	void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void ClearDamageInvulnerability();
 	bool CanStartSkill() const;
 	bool HasEnoughManaForSkill(int32 SkillIndex) const;

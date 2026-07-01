@@ -23,6 +23,7 @@
 #include "ModengResultWidget.h"
 #include "MovieSceneSequencePlayer.h"
 #include "TimerManager.h"
+#include "Variant_SideScrolling/SideScrollingCharacter.h"
 
 AModengEnemySpawner::AModengEnemySpawner()
 {
@@ -62,6 +63,19 @@ void AModengEnemySpawner::BeginPlay()
 		PlayerController->SetPause(false);
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->SetShowMouseCursor(false);
+	}
+
+	for (TActorIterator<ASideScrollingCharacter> It(GetWorld()); It; ++It)
+	{
+		if (ASideScrollingCharacter* PlayerCharacter = *It)
+		{
+			PlayerCharacter->OnDeathAnimationFinished.AddDynamic(this, &AModengEnemySpawner::HandlePlayerDeathAnimationFinished);
+			if (PlayerCharacter->IsPlayerDefeated() && PlayerCharacter->IsPlayerDeathAnimationFinished())
+			{
+				HandlePlayerDeathAnimationFinished();
+			}
+			break;
+		}
 	}
 
 	if (bSpawnOnBeginPlay)
@@ -477,6 +491,11 @@ void AModengEnemySpawner::CheckWaveProgress()
 	}
 
 	GetWorld()->GetTimerManager().SetTimer(NextWaveTimer, this, &AModengEnemySpawner::StartNextWave, DelayBetweenWaves, false);
+}
+
+void AModengEnemySpawner::HandlePlayerDeathAnimationFinished()
+{
+	EndGame(false);
 }
 
 void AModengEnemySpawner::EndGame(bool bPlayerWon)

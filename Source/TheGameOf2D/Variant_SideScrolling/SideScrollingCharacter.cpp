@@ -106,6 +106,12 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 		HitReactionAnimation = HitReactionAsset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> DeathAnimationAsset(TEXT("/Game/MoDeng/Animations/Tomoe/Hit/AS_Knock_Down_Start_Seq.AS_Knock_Down_Start_Seq"));
+	if (DeathAnimationAsset.Succeeded())
+	{
+		DeathAnimation = DeathAnimationAsset.Object;
+	}
+
 	// configure the collision capsule
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
 
@@ -218,6 +224,7 @@ void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
 	GetWorld()->GetTimerManager().ClearTimer(HitInvulnerabilityTimer);
 	GetWorld()->GetTimerManager().ClearTimer(HitReactionTimer);
+	GetWorld()->GetTimerManager().ClearTimer(DeathAnimationTimer);
 	GetWorld()->GetTimerManager().ClearTimer(SkillReleaseTimer);
 }
 
@@ -2125,6 +2132,187 @@ void ASideScrollingCharacter::OnHitReactionMontageEnded(UAnimMontage* Montage, b
 	FinishHitReaction();
 }
 
+bool ASideScrollingCharacter::PlayDeathAnimation(AActor* DamageSource)
+{
+	USkeletalMeshComponent* CharacterMesh = GetMesh();
+	UAnimInstance* AnimInstance = CharacterMesh ? CharacterMesh->GetAnimInstance() : nullptr;
+	if (!CharacterMesh || !AnimInstance)
+	{
+		return false;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(DeathAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(HitReactionTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackAnimationTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowStartTimer);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitWindowEndTimer);
+	GetWorld()->GetTimerManager().ClearTimer(SkillReleaseTimer);
+
+	if (bAttackHitWindowActive)
+	{
+		ClearAttackHitWindows();
+	}
+
+	if (ActiveGroundAttackMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveGroundAttackMontage);
+		ActiveGroundAttackMontage = nullptr;
+	}
+
+	if (ActiveAirToFloorAttackMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveAirToFloorAttackMontage);
+		ActiveAirToFloorAttackMontage = nullptr;
+	}
+
+	if (ActiveCombatTransitionMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveCombatTransitionMontage);
+		ActiveCombatTransitionMontage = nullptr;
+	}
+
+	if (ActiveRollMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveRollMontage);
+		ActiveRollMontage = nullptr;
+	}
+
+	if (ActiveSkillMontage)
+	{
+		AnimInstance->Montage_Stop(0.04f, ActiveSkillMontage);
+		ActiveSkillMontage = nullptr;
+	}
+
+	if (ActiveHitReactionMontage)
+	{
+		AnimInstance->Montage_Stop(0.02f, ActiveHitReactionMontage);
+		ActiveHitReactionMontage = nullptr;
+	}
+
+	if (ActiveDeathMontage)
+	{
+		AnimInstance->Montage_Stop(0.02f, ActiveDeathMontage);
+		ActiveDeathMontage = nullptr;
+	}
+
+	if (!bAttackAnimationInProgress)
+	{
+		MeshTransformBeforeAttackAnimation = CharacterMesh->GetRelativeTransform();
+	}
+
+	RestoreRollFallingMovement();
+	bHitReactionInProgress = false;
+	bAttackAnimationInProgress = true;
+	bAttackHitPending = false;
+	bComboInputQueued = false;
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
+	bAirToFloorAttackInProgress = false;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	bSkillReleaseInProgress = false;
+	RollMoveQueuedValue = 0.0f;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::HitReact;
+	SetSkillWeaponModeForNotify(TEXT("InScabbard"));
+	SetCombatWeaponDrawn(false);
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->StopMovementImmediately();
+		if (HitReactionKnockbackImpulse > 0.0f && DamageSource)
+		{
+			const float AwayFromDamageX = FMath::Sign(GetActorLocation().X - DamageSource->GetActorLocation().X);
+			const float SafeAwayFromDamageX = FMath::IsNearlyZero(AwayFromDamageX) ? -LastFacingX : AwayFromDamageX;
+			MovementComponent->AddImpulse(FVector(SafeAwayFromDamageX * HitReactionKnockbackImpulse, 0.0f, 0.0f), true);
+		}
+	}
+
+	const float SafePlayRate = FMath::Max(DeathPlayRate, 0.1f);
+	float Duration = 0.0f;
+	if (DeathMontage)
+	{
+		ActiveDeathMontage = DeathMontage.Get();
+		Duration = AnimInstance->Montage_Play(ActiveDeathMontage, SafePlayRate);
+		if (Duration <= 0.0f)
+		{
+			ActiveDeathMontage = nullptr;
+		}
+	}
+
+	if (!ActiveDeathMontage && DeathAnimation)
+	{
+		ActiveDeathMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+			DeathAnimation.Get(),
+			DeathSlotName,
+			FMath::Max(DeathBlendInTime, 0.0f),
+			FMath::Max(DeathBlendOutTime, 0.0f),
+			SafePlayRate);
+		Duration = ActiveDeathMontage ? DeathAnimation->GetPlayLength() / SafePlayRate : 0.0f;
+	}
+
+	if (ActiveDeathMontage)
+	{
+		FOnMontageEnded EndDelegate;
+		EndDelegate.BindUObject(this, &ASideScrollingCharacter::OnDeathMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(EndDelegate, ActiveDeathMontage);
+	}
+
+	if (Duration > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(DeathAnimationTimer, this, &ASideScrollingCharacter::FinishDeathAnimation, Duration + FMath::Max(DeathResultDelay, 0.0f), false);
+	}
+	else
+	{
+		FinishDeathAnimation();
+		return false;
+	}
+
+	return true;
+}
+
+void ASideScrollingCharacter::FinishDeathAnimation()
+{
+	GetWorld()->GetTimerManager().ClearTimer(DeathAnimationTimer);
+	if (!bPlayerDefeated || bDeathAnimationFinished)
+	{
+		return;
+	}
+
+	bDeathAnimationFinished = true;
+	bAttackAnimationInProgress = false;
+	bHitReactionInProgress = false;
+	bAttackHitPending = false;
+	bComboInputQueued = false;
+	bGroundAttackMontageInProgress = false;
+	bGroundComboInputWindowOpen = false;
+	bGroundMoveCancelWindowOpen = false;
+	bAirToFloorAttackInProgress = false;
+	bRollInProgress = false;
+	bRollCancelWindowOpen = false;
+	bRollInvincible = false;
+	bRollAttackQueued = false;
+	bRollJumpQueued = false;
+	bSkillReleaseInProgress = false;
+	CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
+	ActiveDeathMontage = nullptr;
+	OnDeathAnimationFinished.Broadcast();
+}
+
+void ASideScrollingCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveDeathMontage)
+	{
+		return;
+	}
+
+	FinishDeathAnimation();
+}
+
 void ASideScrollingCharacter::ClearDamageInvulnerability()
 {
 	bDamageInvulnerable = false;
@@ -2773,8 +2961,9 @@ bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* Da
 	if (CurrentHealth <= 0.0f)
 	{
 		bPlayerDefeated = true;
+		bDeathAnimationFinished = false;
 		InterruptAttackAnimation();
-		PlayHitReaction(DamageSource);
+		PlayDeathAnimation(DamageSource);
 		if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 		{
 			MovementComponent->DisableMovement();
@@ -2806,6 +2995,11 @@ float ASideScrollingCharacter::GetHealthPercent() const
 bool ASideScrollingCharacter::IsPlayerDefeated() const
 {
 	return bPlayerDefeated;
+}
+
+bool ASideScrollingCharacter::IsPlayerDeathAnimationFinished() const
+{
+	return bDeathAnimationFinished;
 }
 
 void ASideScrollingCharacter::TryUpgradeWeapon()
