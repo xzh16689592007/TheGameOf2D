@@ -18,6 +18,8 @@ public class TheGameOf2D : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"Niagara",
+			"LevelSequence",
+			"MovieScene",
 			"UMG",
 			"Slate",
 			"SlateCore"

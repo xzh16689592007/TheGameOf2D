@@ -11,6 +11,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "LevelSequenceActor.h"
+#include "LevelSequencePlayer.h"
 #include "Misc/PackageName.h"
 #include "ModengBossEnemy.h"
 #include "ModengEnemy.h"
@@ -19,6 +21,7 @@
 #include "ModengLantern.h"
 #include "ModengRangedEnemy.h"
 #include "ModengResultWidget.h"
+#include "MovieSceneSequencePlayer.h"
 #include "TimerManager.h"
 
 AModengEnemySpawner::AModengEnemySpawner()
@@ -63,7 +66,7 @@ void AModengEnemySpawner::BeginPlay()
 
 	if (bSpawnOnBeginPlay)
 	{
-		StartNextWave();
+		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AModengEnemySpawner::StartSpawning);
 	}
 }
 
@@ -74,6 +77,19 @@ void AModengEnemySpawner::Tick(float DeltaSeconds)
 	if (bGameEnded)
 	{
 		return;
+	}
+
+	if (bPauseSpawningDuringCinematics)
+	{
+		const bool bCinematicPlaying = IsAnyCinematicPlaying();
+		if (bCinematicPlaying && !bSpawningPausedForCinematic)
+		{
+			SetSpawningPausedForCinematic(true);
+		}
+		else if (!bCinematicPlaying && bSpawningPausedForCinematic)
+		{
+			SetSpawningPausedForCinematic(false);
+		}
 	}
 
 	if (AreAllLanternsExtinguished())
@@ -87,7 +103,7 @@ void AModengEnemySpawner::Tick(float DeltaSeconds)
 
 void AModengEnemySpawner::SpawnEnemy()
 {
-	if (bGameEnded || !bWaveActive || (EnemyTypes.Num() == 0 && !BossEnemyClass))
+	if (bGameEnded || bSpawningPausedForCinematic || !bWaveActive || (EnemyTypes.Num() == 0 && !BossEnemyClass))
 	{
 		return;
 	}
@@ -157,10 +173,72 @@ void AModengEnemySpawner::SpawnEnemy()
 	}
 }
 
+void AModengEnemySpawner::StartSpawning()
+{
+	if (bGameEnded || CurrentWave > 0 || bWaveActive)
+	{
+		return;
+	}
+
+	if (bPauseSpawningDuringCinematics && IsAnyCinematicPlaying())
+	{
+		bStartSpawningAfterCinematic = true;
+		SetSpawningPausedForCinematic(true);
+		return;
+	}
+
+	StartNextWave();
+}
+
+void AModengEnemySpawner::SetSpawningPausedForCinematic(bool bPaused)
+{
+	if (bGameEnded || bSpawningPausedForCinematic == bPaused)
+	{
+		return;
+	}
+
+	bSpawningPausedForCinematic = bPaused;
+	if (bPaused)
+	{
+		if (CurrentWave == 0 && !bWaveActive)
+		{
+			bStartSpawningAfterCinematic = true;
+		}
+
+		GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
+		GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
+		return;
+	}
+
+	if (bStartSpawningAfterCinematic)
+	{
+		bStartSpawningAfterCinematic = false;
+		StartSpawning();
+		return;
+	}
+
+	if (bWaveActive && (EnemiesSpawnedThisWave < EnemiesToSpawnThisWave || BossesSpawnedThisWave < BossesToSpawnThisWave))
+	{
+		SpawnEnemy();
+		GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &AModengEnemySpawner::SpawnEnemy, SpawnInterval, true);
+	}
+	else if (!bWaveActive && CurrentWave > 0 && CurrentWave < TotalWaves)
+	{
+		GetWorld()->GetTimerManager().SetTimer(NextWaveTimer, this, &AModengEnemySpawner::StartNextWave, DelayBetweenWaves, false);
+	}
+}
+
 void AModengEnemySpawner::StartNextWave()
 {
 	if (bGameEnded)
 	{
+		return;
+	}
+
+	if (bPauseSpawningDuringCinematics && IsAnyCinematicPlaying())
+	{
+		bStartSpawningAfterCinematic = CurrentWave == 0 && !bWaveActive;
+		SetSpawningPausedForCinematic(true);
 		return;
 	}
 
@@ -327,6 +405,27 @@ bool AModengEnemySpawner::ShouldSpawnBossThisWave() const
 bool AModengEnemySpawner::ShouldShowLevelCompleteMenuOnVictory() const
 {
 	return bAutoLoadSecondLevelAfterLevelOne && IsCurrentLevel(LevelOneName) && !LevelTwoName.IsNone() && DoesConfiguredSecondLevelExist();
+}
+
+bool AModengEnemySpawner::IsAnyCinematicPlaying() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	for (TActorIterator<ALevelSequenceActor> It(World); It; ++It)
+	{
+		const ALevelSequenceActor* SequenceActor = *It;
+		const ULevelSequencePlayer* SequencePlayer = SequenceActor ? SequenceActor->GetSequencePlayer() : nullptr;
+		if (SequencePlayer && SequencePlayer->IsPlaying())
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void AModengEnemySpawner::ApplyCurrentLevelDefaults()

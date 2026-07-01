@@ -8,7 +8,9 @@
 #include "SideScrollingPlayerController.generated.h"
 
 class ASideScrollingCharacter;
+class ALevelSequenceActor;
 class UInputMappingContext;
+class ULevelSequence;
 
 /**
  *  A simple Side Scrolling Player Controller
@@ -19,6 +21,10 @@ UCLASS(abstract, Config="Game")
 class ASideScrollingPlayerController : public APlayerController
 {
 	GENERATED_BODY()
+
+public:
+
+	ASideScrollingPlayerController();
 	
 protected:
 
@@ -42,6 +48,20 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
 	bool bForceTouchControls = false;
 
+	/** Automatically lock gameplay input while a Level Sequence cinematic is playing. */
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	bool bAutoDisableInputDuringCinematics = true;
+
+	/** Automatically play this opening cinematic on the configured level. */
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	bool bAutoPlayOpeningCinematic = true;
+
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	FName OpeningCinematicLevelName = TEXT("L_Level01_Street");
+
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	TSoftObjectPtr<ULevelSequence> OpeningCinematicSequence;
+
 	/** Character class to respawn when the possessed pawn is destroyed */
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<ASideScrollingCharacter> CharacterClass;
@@ -53,6 +73,8 @@ protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
@@ -70,5 +92,15 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+	bool IsAnyLevelSequencePlaying() const;
+	void SetCinematicInputLocked(bool bLocked);
+	bool IsCurrentLevel(FName LevelName) const;
+	void TryPlayOpeningCinematic();
+
+	bool bCinematicInputLocked = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ALevelSequenceActor> ActiveOpeningCinematicActor = nullptr;
 
 };

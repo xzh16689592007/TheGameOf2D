@@ -12,9 +12,18 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "LevelSequence.h"
+#include "LevelSequenceActor.h"
+#include "LevelSequencePlayer.h"
+#include "MovieSceneSequencePlayer.h"
 #include "Blueprint/UserWidget.h"
 #include "TheGameOf2D.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+
+ASideScrollingPlayerController::ASideScrollingPlayerController()
+{
+	OpeningCinematicSequence = TSoftObjectPtr<ULevelSequence>(FSoftObjectPath(TEXT("/Game/MoDeng/Cinematics/LS_Level01_Intro.LS_Level01_Intro")));
+}
 
 void ASideScrollingPlayerController::BeginPlay()
 {
@@ -37,6 +46,18 @@ void ASideScrollingPlayerController::BeginPlay()
 
 		}
 
+	}
+
+	TryPlayOpeningCinematic();
+}
+
+void ASideScrollingPlayerController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bAutoDisableInputDuringCinematics && IsLocalPlayerController())
+	{
+		SetCinematicInputLocked(IsAnyLevelSequencePlaying());
 	}
 }
 
@@ -72,6 +93,11 @@ void ASideScrollingPlayerController::SetupInputComponent()
 
 void ASideScrollingPlayerController::DoSkill()
 {
+	if (bCinematicInputLocked)
+	{
+		return;
+	}
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, TEXT("E Skill input"));
@@ -85,6 +111,11 @@ void ASideScrollingPlayerController::DoSkill()
 
 void ASideScrollingPlayerController::TryRepairNearestLantern()
 {
+	if (bCinematicInputLocked)
+	{
+		return;
+	}
+
 	APawn* ControlledPawn = GetPawn();
 	if (!ControlledPawn || !GetWorld())
 	{
@@ -150,4 +181,86 @@ bool ASideScrollingPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
+}
+
+bool ASideScrollingPlayerController::IsAnyLevelSequencePlaying() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	for (TActorIterator<ALevelSequenceActor> It(World); It; ++It)
+	{
+		const ALevelSequenceActor* SequenceActor = *It;
+		const ULevelSequencePlayer* SequencePlayer = SequenceActor ? SequenceActor->GetSequencePlayer() : nullptr;
+		if (SequencePlayer && SequencePlayer->IsPlaying())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void ASideScrollingPlayerController::SetCinematicInputLocked(bool bLocked)
+{
+	if (bCinematicInputLocked == bLocked)
+	{
+		return;
+	}
+
+	bCinematicInputLocked = bLocked;
+	SetIgnoreMoveInput(bLocked);
+	SetIgnoreLookInput(bLocked);
+
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		if (bLocked)
+		{
+			ControlledPawn->DisableInput(this);
+		}
+		else
+		{
+			ControlledPawn->EnableInput(this);
+			SetInputMode(FInputModeGameOnly());
+			SetShowMouseCursor(false);
+		}
+	}
+}
+
+bool ASideScrollingPlayerController::IsCurrentLevel(FName LevelName) const
+{
+	if (LevelName.IsNone() || !GetWorld())
+	{
+		return false;
+	}
+
+	return GetWorld()->GetMapName().EndsWith(LevelName.ToString());
+}
+
+void ASideScrollingPlayerController::TryPlayOpeningCinematic()
+{
+	if (!bAutoPlayOpeningCinematic || !IsLocalPlayerController() || !IsCurrentLevel(OpeningCinematicLevelName) || IsAnyLevelSequencePlaying())
+	{
+		return;
+	}
+
+	ULevelSequence* LevelSequence = OpeningCinematicSequence.LoadSynchronous();
+	if (!LevelSequence || !GetWorld())
+	{
+		return;
+	}
+
+	FMovieSceneSequencePlaybackSettings PlaybackSettings;
+	ALevelSequenceActor* SequenceActor = nullptr;
+	ULevelSequencePlayer* SequencePlayer = ULevelSequencePlayer::CreateLevelSequencePlayer(GetWorld(), LevelSequence, PlaybackSettings, SequenceActor);
+	if (!SequencePlayer)
+	{
+		return;
+	}
+
+	ActiveOpeningCinematicActor = SequenceActor;
+	SequencePlayer->Play();
 }

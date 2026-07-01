@@ -111,6 +111,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner")
 	bool bSpawnOnBeginPlay = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Cinematics")
+	bool bPauseSpawningDuringCinematics = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
 	TSubclassOf<UModengResultWidget> ResultWidgetClass;
 
@@ -134,11 +137,19 @@ protected:
 
 	bool bWaveActive = false;
 	bool bGameEnded = false;
+	bool bSpawningPausedForCinematic = false;
+	bool bStartSpawningAfterCinematic = false;
 	int32 BossesSpawnedThisWave = 0;
 	int32 BossesToSpawnThisWave = 0;
 
 	UFUNCTION(BlueprintCallable, Category = "Spawner")
 	void SpawnEnemy();
+
+	UFUNCTION(BlueprintCallable, Category = "Spawner")
+	void StartSpawning();
+
+	UFUNCTION(BlueprintCallable, Category = "Spawner")
+	void SetSpawningPausedForCinematic(bool bPaused);
 
 	UFUNCTION(BlueprintCallable, Category = "Spawner")
 	void StartNextWave();
@@ -151,6 +162,7 @@ protected:
 	bool DoesConfiguredSecondLevelExist() const;
 	bool ShouldSpawnBossThisWave() const;
 	bool ShouldShowLevelCompleteMenuOnVictory() const;
+	bool IsAnyCinematicPlaying() const;
 	void ApplyCurrentLevelDefaults();
 	void CheckWaveProgress();
 	void EndGame(bool bPlayerWon);

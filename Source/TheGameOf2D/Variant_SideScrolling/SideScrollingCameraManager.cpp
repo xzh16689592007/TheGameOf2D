@@ -12,6 +12,13 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 	// ensure the view target is a pawn
 	APawn* TargetPawn = Cast<APawn>(OutVT.Target);
 
+	// Let Unreal drive non-pawn view targets such as Sequencer camera actors.
+	if (!IsValid(TargetPawn))
+	{
+		Super::UpdateViewTarget(OutVT, DeltaTime);
+		return;
+	}
+
 	// is our target valid?
 	if (IsValid(TargetPawn))
 	{
