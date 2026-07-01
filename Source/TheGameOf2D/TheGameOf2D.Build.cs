@@ -29,14 +29,6 @@ public class TheGameOf2D : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"TheGameOf2D",
-			"TheGameOf2D/Variant_Platforming",
-			"TheGameOf2D/Variant_Platforming/Animation",
-			"TheGameOf2D/Variant_Combat",
-			"TheGameOf2D/Variant_Combat/AI",
-			"TheGameOf2D/Variant_Combat/Animation",
-			"TheGameOf2D/Variant_Combat/Gameplay",
-			"TheGameOf2D/Variant_Combat/Interfaces",
-			"TheGameOf2D/Variant_Combat/UI",
 			"TheGameOf2D/Variant_SideScrolling",
 			"TheGameOf2D/Variant_SideScrolling/Animation",
 			"TheGameOf2D/Variant_SideScrolling/AI",

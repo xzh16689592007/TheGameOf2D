@@ -268,10 +268,22 @@ protected:
 	bool bSkillGrantsInvulnerability = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
-	TObjectPtr<UAnimSequenceBase> SkillAnimation = nullptr;
+	TObjectPtr<UAnimSequenceBase> NumberSkill1Animation = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
-	TObjectPtr<UAnimMontage> SkillMontage = nullptr;
+	TObjectPtr<UAnimMontage> NumberSkill1Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> NumberSkill2Animation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> NumberSkill2Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimSequenceBase> NumberSkill3Animation = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
+	TObjectPtr<UAnimMontage> NumberSkill3Montage = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
 	FName SkillSlotName = TEXT("GroundAttackSlot");
@@ -353,22 +365,45 @@ protected:
 	FTimerHandle HitReactionTimer;
 	FTimerHandle SkillReleaseTimer;
 
+	struct FActiveAttackHitWindow
+	{
+		FVector PreviousWeaponTraceStart = FVector::ZeroVector;
+		FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
+		TSet<AModengEnemy*> HitEnemies;
+		float FacingSign = 1.0f;
+		float DamageMultiplier = 1.0f;
+		float KnockbackDistance = 30.0f;
+		float WeaponTraceRadius = 24.0f;
+		float MinimumWeaponMotionSpeed = 180.0f;
+		bool bUseAutomaticWeaponMotionHitWindow = false;
+		bool bForceCurrentSegmentHit = false;
+		bool bHasPreviousWeaponTrace = false;
+		bool bRegisteredHit = false;
+	};
+
+	struct FDeferredAttackKnockback
+	{
+		TWeakObjectPtr<AModengEnemy> Enemy;
+		float FacingSign = 1.0f;
+		float Distance = 0.0f;
+	};
+
 	FTransform MeshTransformBeforeAttackAnimation;
-	FVector PreviousWeaponTraceStart = FVector::ZeroVector;
-	FVector PreviousWeaponTraceEnd = FVector::ZeroVector;
-	TSet<AModengEnemy*> HitEnemiesThisAttack;
+	TArray<FActiveAttackHitWindow> ActiveAttackHitWindows;
+	TArray<FDeferredAttackKnockback> DeferredAttackKnockbacks;
 	float PendingAttackFacingSign = 1.0f;
 	float CurrentAttackDamageMultiplier = 1.0f;
 	float CurrentAttackKnockbackDistance = 30.0f;
 	float CurrentWeaponTraceRadius = 24.0f;
 	float CurrentMinimumWeaponMotionSpeed = 180.0f;
 	int32 CurrentGroundComboStep = 0;
+	int32 ActiveSkillIndex = 0;
 	ESideScrollingCombatAnimationPhase CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
 	bool bAttackHitWindowActive = false;
-	bool bHasPreviousWeaponTrace = false;
 	bool bAttackRegisteredHit = false;
+	bool bDeferAttackKnockback = false;
 	bool bComboInputQueued = false;
 	bool bUseSkillWeaponTrace = false;
 	bool bGroundAttackMontageInProgress = false;
@@ -476,17 +511,28 @@ public:
 
 	/** Handles skill inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoSkill();
+	virtual void DoSkill1();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill2();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkill3();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoSkillByIndex(int32 SkillIndex);
 
 	UFUNCTION(BlueprintPure, Category="Input")
 	bool IsSkillReleaseInProgress() const;
 
-	/** Event hook for Blueprint skill animation/gameplay setup */
-	UFUNCTION(BlueprintImplementableEvent, Category="Input")
-	void OnSkillInputPressed();
+	UFUNCTION(BlueprintPure, Category="Input")
+	int32 GetActiveSkillIndex() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
-	void OnSkillReleaseFinished();
+	void OnSkillInputPressedByIndex(int32 SkillIndex);
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Input")
+	void OnSkillReleaseFinishedByIndex(int32 SkillIndex);
 
 	/** Handles basic attack inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
@@ -516,6 +562,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetCurrentAttackRadius() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
+	float GetSideScrollingFacingSign() const;
 
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
 	bool ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource = nullptr);
@@ -573,9 +622,11 @@ protected:
 	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void ClearDamageInvulnerability();
 	bool CanStartSkill() const;
-	void StartSkillRelease();
+	void StartSkillRelease(int32 SkillIndex);
 	void FinishSkillRelease();
-	float PlaySkillReleaseAnimation();
+	float PlaySkillReleaseAnimation(int32 SkillIndex);
+	UAnimSequenceBase* GetSkillAnimationForIndex(int32 SkillIndex) const;
+	UAnimMontage* GetSkillMontageForIndex(int32 SkillIndex) const;
 	void StopActiveSkillMontage(float BlendOutTime);
 	void OnSkillMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void OnRollMontageEnded(UAnimMontage* Montage, bool bInterrupted);
@@ -586,17 +637,21 @@ protected:
 	void ApplyPendingAttackHit();
 	void BeginAttackHitWindow();
 	void EndAttackHitWindow();
+	void ClearAttackHitWindows(bool bReportMisses = false);
+	void RefreshAttackHitWindowState();
 	void UpdateAttackHitWindow();
+	void FlushDeferredAttackKnockbacks();
 	void RestorePlayerAnimationBlueprint();
 	void FinishAttackAnimation();
 	void InterruptAttackAnimation();
 	void ResetAttackCombo();
 	void UpdateFacingDirection(float FacingSign);
+	void RefreshSwordInScabbardVisibility();
 	USceneComponent* FindSceneComponentByName(FName ComponentName) const;
 	bool ResolveWeaponTraceComponents(USceneComponent*& OutTraceStartComponent, USceneComponent*& OutTraceEndComponent) const;
-	bool ApplyWeaponTraceAttackHit(float FacingSign, bool& bOutTraceAttempted);
-	bool ApplyFallbackBoxAttackHit(float FacingSign);
-	void DamageEnemyFromAttack(AModengEnemy* Enemy, float FacingSign);
+	bool ApplyWeaponTraceAttackHit(FActiveAttackHitWindow& AttackWindow, bool& bOutTraceAttempted);
+	bool ApplyFallbackBoxAttackHit(FActiveAttackHitWindow& AttackWindow);
+	void DamageEnemyFromAttack(AModengEnemy* Enemy, const FActiveAttackHitWindow& AttackWindow);
 
 public:
 

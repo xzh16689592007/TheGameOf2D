@@ -3,7 +3,7 @@
 ## Project Basics
 
 - Original project path used in earlier handoffs: `D:\UE_project\TheGameOf2D`
-- Current local path used for this handoff: `C:\Users\26474\Documents\Unreal Projects\TheGameOf2D`
+- Current local path used for this handoff: `D:\UE_project\TheGameOf2D`
 - Unreal project file: `TheGameOf2D.uproject`
 - Engine: Unreal Engine 5.7
 - GitHub repo: `https://github.com/xzh16689592007/TheGameOf2D`
@@ -21,7 +21,7 @@
   - Enemies move toward the nearest lit lantern.
   - Enemies attack lanterns and reduce durability.
   - Player repairs lanterns with `F`.
-  - Player uses the current skill with `E`.
+  - Player uses skills with `1`, `2`, and `3`; `E` is currently unbound and does nothing.
   - Player attacks enemies with left mouse button or `J`.
   - Killing enemies gives ink.
   - Ink upgrades weapon level automatically.
@@ -42,17 +42,12 @@
     - `Content/SamuraiGirlTomoe/Mesh/SKEL_Tomoe_Skeleton.uasset`
     - `Content/SamuraiGirlTomoe/Mesh/PA_Tomoe_PhysicsAsset.uasset`
     - `Content/SamuraiGirlTomoe/Mesh/IKR_Tomoe.uasset`
-- Imported sword combat animation folder: `Content/CombatMasterAnimBundle`
-  - Source library path: `D:\UE素材库\Combat Master Sword Combat Anims Bundle\CombatMasterAnimBundle\CombatMasterAnimBundle`
-  - Use the `IP` / `InPlace` animation folders first for this 2.5D project.
-  - Avoid `RM` / `RootMotion` animations for now because player movement is controlled by C++.
-  - Useful source attack examples:
-    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A1_IP.uasset`
-    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnimsV2/IP/Attack/Anim_DK2_Combo_A2_IP.uasset`
-    - `Content/CombatMasterAnimBundle/Animations/DynamicKatanaAnims/InPlace/ComboAttack/Anim_DK_Combo_A01_IP.uasset`
-  - Weapon examples:
-    - `Content/CombatMasterAnimBundle/Weapon/Katana`
-    - `Content/CombatMasterAnimBundle/Weapon/Sword`
+- Removed unused template/source animation folders from the project checkout:
+  - `Content/CombatMasterAnimBundle`
+  - `Content/Characters`
+  - Old `Content/Variant_SideScrolling/Lvl_SideScrolling` map assets and related external actors/objects
+  - NiagaraMagicalSlashes demo map/key assets that are not referenced by current MoDeng gameplay
+  - Current playable maps remain `Content/MoDeng/Maps/L_Level01_Street.umap` and `Content/MoDeng/Maps/L_Level02_BridgeMarket.umap`.
 - Current player attack VFX folder: `Content/FX`
   - `Content/FX/NewNiagaraSystem.uasset`
     - Current prototype slash/ribbon effect used by Tomoe attack montages.
@@ -66,6 +61,11 @@
     - `M_Lightning.uasset`, `M_Flare.uasset`, and `M_Sprite.uasset` are available for future lightning, flash, or sprite particles.
   - `Content/FX/Particles/Textures`
     - Useful trail textures include `T_Lightning`, `T_Tile_Noise_Tendril_01`, and `T_Turbulence_Seamless`.
+- Imported slash VFX folder:
+  - `Content/NiagaraMagicalSlashes`
+    - Added locally for sword slash, sword trail, stab, water/fire/lava, and circular slash effect references.
+    - Useful starting points are under `Content/NiagaraMagicalSlashes/Fx/Slashes` and `Content/NiagaraMagicalSlashes/Fx/SwordTrail`.
+    - Demo map/key assets not referenced by current MoDeng gameplay were removed; keep gameplay references pointed at the specific effect assets used by Tomoe skills.
 - Imported projectile / spell VFX folders:
   - `Content/PewPewPack`
     - Added in commit `8e67129`.
@@ -103,9 +103,8 @@
   - It is not currently part of the active player combo setup.
   - The project-local `Content/SwordAnimsetPro` folder and failed Tomoe retarget test folder under `Content/MoDeng/Animations/Tomoe/Attack/SwordAnimsetPro` were removed as unused test content.
 - Current Tomoe player animation assets:
-  - `Content/MoDeng/Animations/RTG_CombatKatana_To_Tomoe.uasset`
   - `Content/MoDeng/Animations/Retarget/IKR_SwordMannequin.uasset`
-  - `Content/MoDeng/Animations/RTG_SwordMannequin_To_Tomoe.uasset`
+  - `Content/MoDeng/Animations/Retarget/RTG_SwordMannequin_To_Tomoe.uasset`
   - `Content/MoDeng/Animations/Tomoe/ABP_Tomoe_SideScroller.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_1.uasset`
   - `Content/MoDeng/Animations/Tomoe/Attack/Sword_Animations/AttackInGround/AM_Tomoe_GroundAttack_2.uasset`
@@ -310,13 +309,14 @@
     - `F` repairs/interacts with nearby lanterns/interactive actors.
     - Uses overlap query to find actors implementing `ISideScrollingInteractable`.
   - Skill:
-    - `E` is routed by `ASideScrollingPlayerController::DoSkill()` into `ASideScrollingCharacter::DoSkill()`.
-    - The skill can only start while grounded. It is blocked during jump/fall, roll, hit reaction, defeat, and while already releasing.
-    - Ground attacks/sheathing can be interrupted into the skill; C++ stops the active attack/transition montage before entering the skill release state.
+    - `1`, `2`, and `3` call `ASideScrollingCharacter::DoSkill1()`, `DoSkill2()`, and `DoSkill3()` directly; `E` no longer has a skill binding.
+    - Skill index `0` is intentionally invalid. Only skill indexes `1`, `2`, and `3` can start.
+    - Skills can only start while grounded. They are blocked during jump/fall, roll, hit reaction, defeat, and while already releasing.
+    - Ground attacks/sheathing can be interrupted into a skill; C++ stops the active attack/transition montage before entering the skill release state.
     - During skill release, movement, jump, drop, interact, attack, and roll inputs are ignored.
     - During skill release, `ApplyDamageToPlayer()` treats the player as invulnerable when `bSkillGrantsInvulnerability` is true.
-    - Skill playback is configured by `SkillAnimation`, `SkillMontage`, `SkillSlotName`, play rate, and blend settings. For current setup, prefer assigning the sequence to `SkillAnimation` and leaving `SkillMontage` empty so sequence notifies fire reliably through the dynamic montage on `GroundAttackSlot`.
-    - Current default skill assets live under `Content/MoDeng/Animations/Tomoe/Attack/Skill/`, including `AS_Combo_Attack_All_Seq` / `AS_Combo_Attack_All_Seq_Montage`; a shorter user-edited FBX/sequence variant may be used for the actual `SkillAnimation` override in `BP_SideScrollingCharacter`.
+    - Skill playback is configured by `NumberSkill1Animation/Montage`, `NumberSkill2Animation/Montage`, `NumberSkill3Animation/Montage`, `SkillSlotName`, play rate, and blend settings.
+    - Number-key skills intentionally do not fall back to any removed legacy skill asset; assign each number skill's own sequence or montage before testing.
     - `SkillReleaseDuration` is only the fallback duration when no skill animation plays; otherwise C++ uses the animation duration.
     - `SideScrollingAnimNotify_SetSkillWeaponMode` is a native skill-only notify for weapon visibility during the skill. Place it on the skill AnimSequence:
       - `SkillHand`: hides normal hand sword and bone sword, shows `Sword_SkillHand`.
@@ -395,7 +395,7 @@
 
 - Move: side-scrolling template movement input.
 - Jump: template jump input. `JumpMaxCount = 2`, so the player has one air jump.
-- Skill: `E`.
+- Skill: `1`, `2`, and `3`. `E` does nothing.
 - Repair/interact: `F`.
 - Attack: left mouse button or `J`.
 - Roll/dodge: right mouse button.
@@ -420,11 +420,11 @@
 - Fast and exploder enemies still need distinct model/animation setup.
 - Player art upgrade current state:
   - `Content/SamuraiGirlTomoe` has been copied into the project.
-  - `Content/CombatMasterAnimBundle` has been copied into the project.
+  - `Content/CombatMasterAnimBundle` was previously copied into the project but has now been removed because the current MoDeng maps and runtime code no longer depend on it.
   - UE IK Retarget work has started:
-    - Source IK Rig was created for CombatMaster/Katana mannequin, named around `IKR_Combat_Katana`.
+    - Source IK Rig was created for the current sword-animation source mannequin.
     - Target IK Rig was created for Tomoe, named around `IKR_Tomoe`.
-    - IK Retargeter was created under `Content/MoDeng/Animations`, named around `RTG_CombatKatana_To_Tomoe`.
+    - IK Retargeter assets now live under `Content/MoDeng/Animations/Retarget`.
     - A Tomoe attack animation was retargeted/exported under `Content/MoDeng/Animations/Tomoe/Attack`.
   - `ABP_Tomoe_SideScroller` has been created as the first Tomoe locomotion animation blueprint.
     - Event Graph reads pawn velocity and writes a `Speed` float.
@@ -482,7 +482,6 @@
     - Combo-window tuning should happen in the montage timeline by moving `Open Ground Combo Window`, `Close Ground Combo Window`, and `Commit Ground Combo` notifies.
     - A single whole-combo montage approach using `Combo_Attack_02_All_Seq` was discussed. It is useful as a pose/timing reference, but the active implementation is four separate montages so each hit can independently end into sheath or chain to the next hit.
   - Player sword/scabbard hookup:
-    - Originally used `Content/CombatMasterAnimBundle/Weapon/Katana/SM_Katana.uasset`; the user later switched the visible weapon mesh to the `Sword_Animations` pack sword to match the current animation source.
     - Current weapon art comes from `Content/Weapon/Sci-fi_Swords_Pack_1`.
       - Dark long blade meshes: `SM_Dark_Long_Blade_Sword` and `SM_Dark_Long_Blade_Sheath`.
       - Frozen sci-fi sword meshes are also imported for later use.
@@ -496,7 +495,7 @@
       - `Sword_Bone` is a skill-only bone/socket-following sword used during the turning/spinning section of the skill.
       - All weapon/scabbard static mesh components should have collision disabled.
       - C++ exposes `SetSceneComponentVisibleByName()` and `SetCombatWeaponDrawnForNotify()` for AnimNotify Blueprints to switch weapon visibility at authored frames.
-      - C++ exposes `SetSkillWeaponModeForNotify()` for the native skill weapon notify; use this for the E skill instead of reusing regular attack draw/sheath notifies.
+      - C++ exposes `SetSkillWeaponModeForNotify()` for the native skill weapon notify; use this for number-key skills instead of reusing regular attack draw/sheath notifies.
       - `AN_ShowSheathedSword` should call `SetCombatWeaponDrawnForNotify(false)` if the sheathed sword needs to appear before the transition montage naturally ends.
     - Add/keep `KatanaTraceStart` and `KatanaTraceEnd` scene components as children of the hand-held weapon component (`Sword_Hand` / previous `Katana`).
     - `KatanaTraceStart` should sit near the blade root/guard.
@@ -652,18 +651,32 @@ Current player update in this handoff:
   - Added `Sword_start`, `Sword_end`, and `Show` sockets/preview helpers on `SKEL_Tomoe_Skeleton`.
   - `BP_SideScrollingCharacter` now references the Sci-fi Frozen Sword assets for the visible weapon/scabbard setup.
   - The weapon still uses C++ trace components for damage; the mesh itself should remain non-colliding.
-- Added current E skill prototype:
-  - `E` triggers a grounded-only skill release; `F` is now the repair/interact key.
+- Added number-key skill prototype:
+  - `1`, `2`, and `3` trigger grounded-only skill releases; `F` is the repair/interact key and `E` does nothing.
   - Skill release locks player input and grants invulnerability while active.
-  - `SkillAnimation` / `SkillMontage` / `SkillSlotName` are exposed on `BP_SideScrollingCharacter`; prefer setting the skill sequence on `SkillAnimation` and leaving `SkillMontage` empty while tuning notifies.
+  - `NumberSkill1Animation/Montage`, `NumberSkill2Animation/Montage`, `NumberSkill3Animation/Montage`, and `SkillSlotName` are exposed on `BP_SideScrollingCharacter`.
   - Added native `SideScrollingAnimNotify_SetSkillWeaponMode` with `SkillHand`, `SwordBone`, and `InScabbard` modes for the authored skill weapon handoff.
   - Current skill weapon component plan: normal combat uses `Sword_Hand`; skill startup uses `Sword_SkillHand`; skill turning section uses `Sword_Bone`; skill end returns to `Sword_InScabbard`.
+- Added separate number-key skill entry points:
+  - `1`, `2`, and `3` call independent skill indexes `1`, `2`, and `3`.
+  - Skill index `0` is invalid and is not mapped to any input.
+  - `NumberSkill1Animation/Montage`, `NumberSkill2Animation/Montage`, and `NumberSkill3Animation/Montage` are exposed on `BP_SideScrollingCharacter`.
+  - Number-key skills intentionally do not fall back to a removed legacy skill asset; assign their own animation or montage before testing.
+- Added `Area Slash Hitboxes` as a native `AnimNotifyState` for authored area attacks:
+  - Supports box, sphere, and capsule hitboxes with per-shape timing, local offset/rotation, damage multiplier, and knockback.
+  - Hit policies are `OncePerNotify`, `OncePerShape`, and `EveryTick`.
+  - Can mirror local offsets by character facing and optionally use a reference bone/socket transform.
+  - Useful for the current sword-in-ground / spherical slash skill prototype; place it on the skill animation where the area damage should exist.
+- Added the current skill animation asset `Content/MoDeng/Animations/Tomoe/Attack/Skill/AS_Execution_01_Seq.uasset` and imported `Content/NiagaraMagicalSlashes` as the reference VFX pack for slash/trail skill effects.
+- Weapon visibility remains mode-based through the existing `SideScrollingAnimNotify_SetSkillWeaponMode` notify.
+  - `Sword_Sheathed` is the scabbard and remains visible.
+  - `Sword_InScabbard` is now automatically hidden whenever `Sword_Hand`, `Sword_SkillHand`, or `Sword_Bone` is visible, preventing a drawn sword and sheathed sword from appearing at the same time.
 - Added Blender helper scripts under `Tools/Blender` for experimenting with current-action/root-motion editing:
   - `scale_root_motion.py`
   - `edit_current_action_root_motion.py`
   - `rewrite_fbx_root_motion.py`
   - These are workflow helpers only; verify edited animations in Blender/UE before replacing project assets.
-- A full build after these C++ changes succeeded on 2026-06-25 with:
+- A full build after these C++ changes succeeded on 2026-06-30 with:
   - `Result: Succeeded`
 - `outputs/` and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
 
@@ -680,9 +693,9 @@ Current player update in this handoff:
 - The Fab asset import under `Content/ROG_Creatures` should be committed through Git LFS.
 - `Content/PewPewPack` and `Content/FireEnergyVFX` are now committed through Git LFS. Fresh clones must run `git lfs pull` before opening the project, otherwise enemy/Boss VFX assets will be missing.
 - `Config/DefaultEditor.ini` may get noisy editor preview-profile changes from opening imported assets. Do not commit those preview-profile changes unless the team explicitly wants editor profile settings in source control.
-- Large Tomoe and CombatMaster imports were pushed through Git LFS in commit `9fcc0c0` (`878` LFS objects, about `1.1 GB` uploaded during push).
+- Large Tomoe and earlier CombatMaster imports were pushed through Git LFS in commit `9fcc0c0`; CombatMaster assets were later removed from the active checkout because current MoDeng gameplay no longer uses them.
 - PewPewPack / FireEnergyVFX imports were pushed through Git LFS in commit `8e67129` (`530` LFS objects, about `308 MB` uploaded during push).
-- Current local working tree may still show `Config/DefaultEditor.ini` modified from editor preview-profile noise. Do not commit that file unless intentional.
+- `Config/DefaultEditor.ini` was committed in the cleanup push because the user explicitly asked to include all current changes.
 
 Team clone instructions:
 
@@ -786,7 +799,7 @@ git lfs pull
    - `Sword_SkillHand` and `Sword_Bone` are skill-only sword display components controlled by `SideScrollingAnimNotify_SetSkillWeaponMode`.
    - Tune the `AN_ShowSheathedSword` notify position in `Idle_Combat_To_Idle_Seq` to control when the sheathed sword reappears during the return-to-idle animation.
    - For regular draw/sheath visibility, call `SetCombatWeaponDrawnForNotify(false)` or `SetSceneComponentVisibleByName()` on `BP_SideScrollingCharacter`.
-   - For the E skill, prefer the native `SetSkillWeaponMode` notify modes: `SkillHand`, `SwordBone`, then `InScabbard`.
+   - For number-key skills, prefer the native `SetSkillWeaponMode` notify modes: `SkillHand`, `SwordBone`, then `InScabbard`.
 
 10. Polish attack hit feedback and VFX:
    - Add short hit stop on successful player melee hit.

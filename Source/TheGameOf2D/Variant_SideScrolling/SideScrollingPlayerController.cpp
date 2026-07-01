@@ -10,7 +10,6 @@
 #include "ModengLantern.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
@@ -65,7 +64,6 @@ void ASideScrollingPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ASideScrollingPlayerController::DoSkill);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ASideScrollingPlayerController::TryRepairNearestLantern);
 
 	// only add IMCs for local player controllers
@@ -88,24 +86,6 @@ void ASideScrollingPlayerController::SetupInputComponent()
 				}
 			}
 		}
-	}
-}
-
-void ASideScrollingPlayerController::DoSkill()
-{
-	if (bCinematicInputLocked)
-	{
-		return;
-	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Purple, TEXT("E Skill input"));
-	}
-
-	if (ASideScrollingCharacter* SideScrollingCharacter = Cast<ASideScrollingCharacter>(GetPawn()))
-	{
-		SideScrollingCharacter->DoSkill();
 	}
 }
 
