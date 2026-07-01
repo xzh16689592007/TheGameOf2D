@@ -148,6 +148,7 @@ void ASideScrollingCharacter::BeginPlay()
 	const float HealthMultiplier = FMath::Max(1.0f, HealthTestMultiplier);
 	MaxHealth *= HealthMultiplier;
 	CurrentHealth = MaxHealth;
+	CurrentMana = FMath::Clamp(CurrentMana, 0.0f, MaxMana);
 
 	bUseControllerRotationYaw = false;
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
@@ -195,6 +196,8 @@ void ASideScrollingCharacter::BeginPlay()
 void ASideScrollingCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	UpdateSkillResources(DeltaSeconds);
 
 	if (bAttackHitWindowActive)
 	{
@@ -527,7 +530,7 @@ void ASideScrollingCharacter::DoSkillByIndex(int32 SkillIndex)
 		return;
 	}
 
-	if (!CanStartSkill())
+	if (!CanUseSkillByIndex(SkillIndex))
 	{
 		return;
 	}
@@ -548,6 +551,83 @@ bool ASideScrollingCharacter::IsSkillReleaseInProgress() const
 int32 ASideScrollingCharacter::GetActiveSkillIndex() const
 {
 	return ActiveSkillIndex;
+}
+
+float ASideScrollingCharacter::GetManaPercent() const
+{
+	if (MaxMana <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(CurrentMana / MaxMana, 0.0f, 1.0f);
+}
+
+float ASideScrollingCharacter::GetCurrentMana() const
+{
+	return CurrentMana;
+}
+
+float ASideScrollingCharacter::GetMaxMana() const
+{
+	return MaxMana;
+}
+
+float ASideScrollingCharacter::GetSkillManaCost(int32 SkillIndex) const
+{
+	switch (SkillIndex)
+	{
+	case 1:
+		return Skill1ManaCost;
+	case 2:
+		return Skill2ManaCost;
+	default:
+		return 0.0f;
+	}
+}
+
+float ASideScrollingCharacter::GetSkillCooldownDuration(int32 SkillIndex) const
+{
+	switch (SkillIndex)
+	{
+	case 1:
+		return Skill1CooldownDuration;
+	case 2:
+		return Skill2CooldownDuration;
+	default:
+		return 0.0f;
+	}
+}
+
+float ASideScrollingCharacter::GetSkillCooldownRemaining(int32 SkillIndex) const
+{
+	switch (SkillIndex)
+	{
+	case 1:
+		return Skill1CooldownRemaining;
+	case 2:
+		return Skill2CooldownRemaining;
+	default:
+		return 0.0f;
+	}
+}
+
+float ASideScrollingCharacter::GetSkillCooldownPercent(int32 SkillIndex) const
+{
+	const float Duration = GetSkillCooldownDuration(SkillIndex);
+	if (Duration <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(GetSkillCooldownRemaining(SkillIndex) / Duration, 0.0f, 1.0f);
+}
+
+bool ASideScrollingCharacter::CanUseSkillByIndex(int32 SkillIndex) const
+{
+	return CanStartSkill()
+		&& HasEnoughManaForSkill(SkillIndex)
+		&& IsSkillCooldownReady(SkillIndex);
 }
 
 void ASideScrollingCharacter::DoAttack()
@@ -639,9 +719,28 @@ void ASideScrollingCharacter::DoRoll()
 		return;
 	}
 
-	if (bRollInProgress || bAttackAnimationInProgress || (!RollMontage && !RollAnimation))
+	if (bRollInProgress || (!RollMontage && !RollAnimation))
 	{
 		return;
+	}
+
+	if (bAttackAnimationInProgress)
+	{
+		if (!bGroundAttackMontageInProgress || !bRollInterruptsGroundCombo)
+		{
+			return;
+		}
+
+		if (UAnimInstance* CurrentAnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+		{
+			if (ActiveGroundAttackMontage)
+			{
+				CurrentAnimInstance->Montage_Stop(0.04f, ActiveGroundAttackMontage);
+			}
+		}
+
+		InterruptAttackAnimation();
+		SetCombatWeaponDrawn(false);
 	}
 
 	USkeletalMeshComponent* CharacterMesh = GetMesh();
@@ -2037,6 +2136,59 @@ bool ASideScrollingCharacter::CanStartSkill() const
 		&& !bIsFalling;
 }
 
+bool ASideScrollingCharacter::HasEnoughManaForSkill(int32 SkillIndex) const
+{
+	return CurrentMana + UE_KINDA_SMALL_NUMBER >= GetSkillManaCost(SkillIndex);
+}
+
+bool ASideScrollingCharacter::IsSkillCooldownReady(int32 SkillIndex) const
+{
+	return GetSkillCooldownRemaining(SkillIndex) <= UE_KINDA_SMALL_NUMBER;
+}
+
+void ASideScrollingCharacter::UpdateSkillResources(float DeltaSeconds)
+{
+	if (DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	if (MaxMana > 0.0f && ManaRegenPerSecond > 0.0f)
+	{
+		CurrentMana = FMath::Clamp(CurrentMana + ManaRegenPerSecond * DeltaSeconds, 0.0f, MaxMana);
+	}
+
+	if (Skill1CooldownRemaining > 0.0f)
+	{
+		Skill1CooldownRemaining = FMath::Max(0.0f, Skill1CooldownRemaining - DeltaSeconds);
+	}
+
+	if (Skill2CooldownRemaining > 0.0f)
+	{
+		Skill2CooldownRemaining = FMath::Max(0.0f, Skill2CooldownRemaining - DeltaSeconds);
+	}
+}
+
+void ASideScrollingCharacter::SpendManaForSkill(int32 SkillIndex)
+{
+	CurrentMana = FMath::Clamp(CurrentMana - GetSkillManaCost(SkillIndex), 0.0f, MaxMana);
+}
+
+void ASideScrollingCharacter::StartSkillCooldown(int32 SkillIndex)
+{
+	switch (SkillIndex)
+	{
+	case 1:
+		Skill1CooldownRemaining = Skill1CooldownDuration;
+		break;
+	case 2:
+		Skill2CooldownRemaining = Skill2CooldownDuration;
+		break;
+	default:
+		break;
+	}
+}
+
 void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 {
 	if (SkillIndex < 1 || SkillIndex > 3)
@@ -2044,10 +2196,13 @@ void ASideScrollingCharacter::StartSkillRelease(int32 SkillIndex)
 		return;
 	}
 
-	if (!CanStartSkill())
+	if (!CanUseSkillByIndex(SkillIndex))
 	{
 		return;
 	}
+
+	SpendManaForSkill(SkillIndex);
+	StartSkillCooldown(SkillIndex);
 
 	if (bAttackAnimationInProgress)
 	{

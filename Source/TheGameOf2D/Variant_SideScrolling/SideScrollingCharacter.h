@@ -153,6 +153,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll", meta = (ClampMin = "0.0"))
 	float RollBlendOutTime = 0.12f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Roll")
+	bool bRollInterruptsGroundCombo = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation")
 	TObjectPtr<UAnimSequenceBase> CombatToIdleAnimation = nullptr;
 
@@ -266,6 +269,27 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill")
 	bool bSkillGrantsInvulnerability = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "1.0"))
+	float MaxMana = 200.0f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Side Scrolling|Skill")
+	float CurrentMana = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float ManaRegenPerSecond = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill1ManaCost = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill2ManaCost = 50.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill1CooldownDuration = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill2CooldownDuration = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
 	TObjectPtr<UAnimSequenceBase> NumberSkill1Animation = nullptr;
@@ -398,6 +422,8 @@ protected:
 	float CurrentMinimumWeaponMotionSpeed = 180.0f;
 	int32 CurrentGroundComboStep = 0;
 	int32 ActiveSkillIndex = 0;
+	float Skill1CooldownRemaining = 0.0f;
+	float Skill2CooldownRemaining = 0.0f;
 	ESideScrollingCombatAnimationPhase CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
@@ -528,6 +554,30 @@ public:
 	UFUNCTION(BlueprintPure, Category="Input")
 	int32 GetActiveSkillIndex() const;
 
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetManaPercent() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetCurrentMana() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetMaxMana() const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetSkillManaCost(int32 SkillIndex) const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetSkillCooldownDuration(int32 SkillIndex) const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetSkillCooldownRemaining(int32 SkillIndex) const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	float GetSkillCooldownPercent(int32 SkillIndex) const;
+
+	UFUNCTION(BlueprintPure, Category="Side Scrolling|Skill")
+	bool CanUseSkillByIndex(int32 SkillIndex) const;
+
 	UFUNCTION(BlueprintImplementableEvent, Category="Input")
 	void OnSkillInputPressedByIndex(int32 SkillIndex);
 
@@ -622,6 +672,11 @@ protected:
 	void OnHitReactionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	void ClearDamageInvulnerability();
 	bool CanStartSkill() const;
+	bool HasEnoughManaForSkill(int32 SkillIndex) const;
+	bool IsSkillCooldownReady(int32 SkillIndex) const;
+	void UpdateSkillResources(float DeltaSeconds);
+	void SpendManaForSkill(int32 SkillIndex);
+	void StartSkillCooldown(int32 SkillIndex);
 	void StartSkillRelease(int32 SkillIndex);
 	void FinishSkillRelease();
 	float PlaySkillReleaseAnimation(int32 SkillIndex);
