@@ -4,6 +4,7 @@
 #include "ModengBossEnemy.h"
 
 #include "Animation/AnimSequenceBase.h"
+#include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
@@ -300,11 +301,38 @@ void AModengBossEnemy::SummonMinions()
 
 		FVector SpawnLocation = GetActorLocation();
 		SpawnLocation.X += SpawnDirection * MinionSpawnSpacing * static_cast<float>(MinionIndex + 1);
+		TryProjectMinionSpawnLocationToGround(MinionClass, SpawnLocation);
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 		GetWorld()->SpawnActor<AModengEnemy>(MinionClass, SpawnLocation, GetActorRotation(), SpawnParams);
 	}
+}
+
+bool AModengBossEnemy::TryProjectMinionSpawnLocationToGround(TSubclassOf<AModengEnemy> MinionClass, FVector& InOutSpawnLocation) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	const FVector TraceStart = InOutSpawnLocation + FVector(0.0f, 0.0f, MinionSpawnGroundTraceUp);
+	const FVector TraceEnd = InOutSpawnLocation - FVector(0.0f, 0.0f, MinionSpawnGroundTraceDown);
+
+	FHitResult GroundHit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BossMinionSpawnGroundTrace), false, this);
+	const FCollisionObjectQueryParams GroundObjectParams(ECC_WorldStatic);
+	if (!World->LineTraceSingleByObjectType(GroundHit, TraceStart, TraceEnd, GroundObjectParams, QueryParams))
+	{
+		return false;
+	}
+
+	const AModengEnemy* MinionDefault = MinionClass ? MinionClass->GetDefaultObject<AModengEnemy>() : nullptr;
+	const UCapsuleComponent* MinionCapsule = MinionDefault ? MinionDefault->GetCapsuleComponent() : nullptr;
+	const float MinionHalfHeight = MinionCapsule ? MinionCapsule->GetUnscaledCapsuleHalfHeight() : 75.0f;
+	InOutSpawnLocation.Z = GroundHit.ImpactPoint.Z + MinionHalfHeight;
+	return true;
 }
 
 void AModengBossEnemy::CastRangedSkill()
