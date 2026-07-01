@@ -56,6 +56,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Player Status")
 	FString Skill2IconFile = TEXT("MoDeng/UI/SkillIcons/Skill2.png");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Player Status")
+	FString Skill3IconFile = TEXT("MoDeng/UI/SkillIcons/Skill3.png");
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Interaction", meta = (ClampMin = "0.0"))
 	float LanternPromptRadius = 220.0f;
 
@@ -67,6 +70,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> Skill2IconTexture = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> Skill3IconTexture = nullptr;
 
 	void DrawStatusLine(const FString& Text, int32 LineIndex, const FLinearColor& Color) const;
 	void DrawPlayerStatusBars(const class ASideScrollingCharacter* Player);

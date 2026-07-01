@@ -140,6 +140,7 @@ void AModengHUD::DrawPlayerStatusBars(const ASideScrollingCharacter* Player)
 	const FVector2D ManaPosition = InkPosition + FVector2D(0.0f, PlayerStatusBarHeight + PlayerStatusBarGap);
 	const FVector2D Skill1Position = ManaPosition + FVector2D(0.0f, PlayerStatusBarHeight + SkillIconTopGap);
 	const FVector2D Skill2Position = Skill1Position + FVector2D(SkillIconSize + SkillIconGap, 0.0f);
+	const FVector2D Skill3Position = Skill2Position + FVector2D(SkillIconSize + SkillIconGap, 0.0f);
 
 	FCanvasTileItem Panel(PanelPosition, PanelSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.42f));
 	Panel.BlendMode = SE_BLEND_Translucent;
@@ -168,6 +169,7 @@ void AModengHUD::DrawPlayerStatusBars(const ASideScrollingCharacter* Player)
 
 	DrawSkillIcon(Skill1Position, 1, Player, GetSkillIconTexture(1));
 	DrawSkillIcon(Skill2Position, 2, Player, GetSkillIconTexture(2));
+	DrawSkillIcon(Skill3Position, 3, Player, GetSkillIconTexture(3));
 }
 
 void AModengHUD::DrawStatusBar(const FVector2D& Position, const FVector2D& Size, float Percent, const FLinearColor& FillColor, const FString& Label) const
@@ -335,6 +337,16 @@ UTexture2D* AModengHUD::GetSkillIconTexture(int32 SkillIndex)
 			Skill2IconTexture = LoadSkillIconTexture(Skill2IconFile);
 		}
 		return Skill2IconTexture;
+	}
+
+	if (SkillIndex == 3)
+	{
+		if (!Skill3IconTexture)
+		{
+			Skill3IconTexture = LoadSkillIconTexture(Skill3IconFile);
+		}
+
+		return Skill3IconTexture;
 	}
 
 	return nullptr;

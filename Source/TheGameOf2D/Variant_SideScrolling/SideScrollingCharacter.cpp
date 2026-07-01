@@ -581,6 +581,8 @@ float ASideScrollingCharacter::GetSkillManaCost(int32 SkillIndex) const
 		return Skill1ManaCost;
 	case 2:
 		return Skill2ManaCost;
+	case 3:
+		return Skill3ManaCost;
 	default:
 		return 0.0f;
 	}
@@ -594,6 +596,8 @@ float ASideScrollingCharacter::GetSkillCooldownDuration(int32 SkillIndex) const
 		return Skill1CooldownDuration;
 	case 2:
 		return Skill2CooldownDuration;
+	case 3:
+		return Skill3CooldownDuration;
 	default:
 		return 0.0f;
 	}
@@ -607,6 +611,8 @@ float ASideScrollingCharacter::GetSkillCooldownRemaining(int32 SkillIndex) const
 		return Skill1CooldownRemaining;
 	case 2:
 		return Skill2CooldownRemaining;
+	case 3:
+		return Skill3CooldownRemaining;
 	default:
 		return 0.0f;
 	}
@@ -2167,6 +2173,11 @@ void ASideScrollingCharacter::UpdateSkillResources(float DeltaSeconds)
 	{
 		Skill2CooldownRemaining = FMath::Max(0.0f, Skill2CooldownRemaining - DeltaSeconds);
 	}
+
+	if (Skill3CooldownRemaining > 0.0f)
+	{
+		Skill3CooldownRemaining = FMath::Max(0.0f, Skill3CooldownRemaining - DeltaSeconds);
+	}
 }
 
 void ASideScrollingCharacter::SpendManaForSkill(int32 SkillIndex)
@@ -2183,6 +2194,9 @@ void ASideScrollingCharacter::StartSkillCooldown(int32 SkillIndex)
 		break;
 	case 2:
 		Skill2CooldownRemaining = Skill2CooldownDuration;
+		break;
+	case 3:
+		Skill3CooldownRemaining = Skill3CooldownDuration;
 		break;
 	default:
 		break;

@@ -286,10 +286,16 @@ protected:
 	float Skill2ManaCost = 50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill3ManaCost = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
 	float Skill1CooldownDuration = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
 	float Skill2CooldownDuration = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
+	float Skill3CooldownDuration = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Animation|Skill")
 	TObjectPtr<UAnimSequenceBase> NumberSkill1Animation = nullptr;
@@ -424,6 +430,7 @@ protected:
 	int32 ActiveSkillIndex = 0;
 	float Skill1CooldownRemaining = 0.0f;
 	float Skill2CooldownRemaining = 0.0f;
+	float Skill3CooldownRemaining = 0.0f;
 	ESideScrollingCombatAnimationPhase CurrentCombatAnimationPhase = ESideScrollingCombatAnimationPhase::None;
 	bool bCurrentUseAutomaticWeaponMotionHitWindow = false;
 	bool bAttackHitPending = false;
