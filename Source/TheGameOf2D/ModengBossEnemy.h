@@ -42,6 +42,12 @@ protected:
 	float MinionSpawnSpacing = 140.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Minions", meta = (ClampMin = "0.0"))
+	float MinionSpawnGroundTraceUp = 700.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Minions", meta = (ClampMin = "0.0"))
+	float MinionSpawnGroundTraceDown = 2200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Minions", meta = (ClampMin = "0.0"))
 	float SummonEverySeconds = 8.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Minions")
@@ -182,6 +188,7 @@ protected:
 	void ApplyBossLoadout();
 	void ApplyScytheDamage();
 	void SummonMinions();
+	bool TryProjectMinionSpawnLocationToGround(TSubclassOf<AModengEnemy> MinionClass, FVector& InOutSpawnLocation) const;
 	void CastRangedSkill();
 	void CastAreaSkill();
 	void ExecuteAreaSkill();

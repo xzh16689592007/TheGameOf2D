@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "CollisionQueryParams.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -20,6 +21,7 @@
 #include "Materials/MaterialInterface.h"
 #include "ModengLantern.h"
 #include "ModengEnemyHealthWidget.h"
+#include "ModengPotionPickup.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -29,10 +31,7 @@ AModengEnemy::AModengEnemy()
 	PrimaryActorTick.bCanEverTick = true;
 
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 75.0f);
-	GetCapsuleComponent()->SetCollisionObjectType(ECC_Pawn);
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Ignore);
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	ConfigureGroundMovement();
 
 	EnemyBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EnemyBody"));
 	EnemyBody->SetupAttachment(RootComponent);
@@ -58,6 +57,8 @@ AModengEnemy::AModengEnemy()
 	HealthBarComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HealthBarComponent->SetHiddenInGame(true);
 	HealthBarComponent->SetVisibility(false);
+
+	PotionPickupClass = AModengPotionPickup::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh.Succeeded())
@@ -143,13 +144,7 @@ AModengEnemy::AModengEnemy()
 		DeathAnimation = SkeletonWarriorDeathAnimation.Object;
 	}
 
-	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
-	GetCharacterMovement()->GravityScale = 0.0f;
-	GetCharacterMovement()->bRunPhysicsWithNoController = true;
-	GetCharacterMovement()->bOrientRotationToMovement = true;
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
-	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
-	GetCharacterMovement()->bConstrainToPlane = true;
+	ConfigureGroundMovement();
 }
 
 void AModengEnemy::BeginPlay()
@@ -158,11 +153,48 @@ void AModengEnemy::BeginPlay()
 
 	ApplyEnemyLoadout();
 	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
-	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+	ConfigureGroundMovement();
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	ConfigureEnemyVisuals();
 	InitializeHealthBar();
 	UpdateLocomotionAnimation(false);
 	FindTarget();
+}
+
+void AModengEnemy::ConfigureGroundMovement()
+{
+	bUseControllerRotationYaw = false;
+
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionObjectType(ECC_Pawn);
+		Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Capsule->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Capsule->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	}
+
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->GravityScale = GroundGravityScale;
+		MovementComponent->MaxAcceleration = 1600.0f;
+		MovementComponent->BrakingFrictionFactor = 1.0f;
+		MovementComponent->bUseSeparateBrakingFriction = true;
+		MovementComponent->BrakingDecelerationWalking = 1800.0f;
+		MovementComponent->MaxWalkSpeed = MoveSpeed;
+		MovementComponent->MinAnalogWalkSpeed = 20.0f;
+		MovementComponent->SetWalkableFloorAngle(WalkableFloorAngle);
+		MovementComponent->MaxStepHeight = MaxStepHeight;
+		MovementComponent->PerchRadiusThreshold = 15.0f;
+		MovementComponent->LedgeCheckThreshold = 6.0f;
+		MovementComponent->bRunPhysicsWithNoController = true;
+		MovementComponent->bIgnoreBaseRotation = true;
+		MovementComponent->bOrientRotationToMovement = false;
+		MovementComponent->bUseControllerDesiredRotation = false;
+		MovementComponent->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
+		MovementComponent->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
+		MovementComponent->bConstrainToPlane = true;
+	}
 }
 
 void AModengEnemy::Tick(float DeltaSeconds)
@@ -261,8 +293,11 @@ void AModengEnemy::MoveTowardTarget(float DeltaSeconds)
 		return;
 	}
 
-	const FVector NewLocation = GetActorLocation() + FVector(DirectionX * MoveSpeed * DeltaSeconds, 0.0f, 0.0f);
-	SetActorLocation(NewLocation, false);
+	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->MaxWalkSpeed = MoveSpeed;
+		AddMovementInput(FVector(DirectionX, 0.0f, 0.0f), 1.0f);
+	}
 	FaceTargetLantern();
 	UpdateLocomotionAnimation(true);
 }
@@ -372,6 +407,7 @@ void AModengEnemy::Die()
 	if (LastDamagingPlayer)
 	{
 		LastDamagingPlayer->AddInk(InkReward);
+		TryDropPotion();
 	}
 
 	SetActorEnableCollision(false);
@@ -871,4 +907,68 @@ void AModengEnemy::ResumeLocomotionAnimation()
 void AModengEnemy::FinishDeath()
 {
 	Destroy();
+}
+
+void AModengEnemy::TryDropPotion()
+{
+	if (!GetWorld() || !PotionPickupClass || PotionDropChance <= 0.0f)
+	{
+		return;
+	}
+
+	if (FMath::FRand() > FMath::Clamp(PotionDropChance, 0.0f, 1.0f))
+	{
+		return;
+	}
+
+	const float TotalWeight = FMath::Max(0.0f, HealthPotionWeight) + FMath::Max(0.0f, ManaPotionWeight);
+	if (TotalWeight <= UE_KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const bool bDropHealthPotion = FMath::FRandRange(0.0f, TotalWeight) <= FMath::Max(0.0f, HealthPotionWeight);
+	const EModengPotionType PotionType = bDropHealthPotion ? EModengPotionType::Health : EModengPotionType::Mana;
+	const float RestoreAmount = bDropHealthPotion ? HealthPotionRestoreAmount : ManaPotionRestoreAmount;
+	if (RestoreAmount <= 0.0f)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AModengPotionPickup* Potion = GetWorld()->SpawnActor<AModengPotionPickup>(
+		PotionPickupClass,
+		GetPotionDropLocation(),
+		FRotator::ZeroRotator,
+		SpawnParams);
+
+	if (Potion)
+	{
+		Potion->InitializePotion(PotionType, RestoreAmount);
+	}
+}
+
+FVector AModengEnemy::GetPotionDropLocation() const
+{
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	const float HalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 75.0f;
+	const FVector ActorLocation = GetActorLocation();
+	FVector FootLocation = ActorLocation - FVector(0.0f, 0.0f, HalfHeight);
+	FootLocation += PotionDropOffset;
+
+	const FVector TraceStart = FootLocation + FVector(0.0f, 0.0f, 50.0f);
+	const FVector TraceEnd = FootLocation - FVector(0.0f, 0.0f, 300.0f);
+
+	FHitResult GroundHit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PotionDropTrace), false, this);
+	const FCollisionObjectQueryParams GroundObjectParams(ECC_WorldStatic);
+	if (GetWorld()->LineTraceSingleByObjectType(GroundHit, TraceStart, TraceEnd, GroundObjectParams, QueryParams))
+	{
+		return GroundHit.ImpactPoint;
+	}
+
+	return FootLocation;
 }

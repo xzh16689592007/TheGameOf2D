@@ -2983,6 +2983,25 @@ bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* Da
 	return true;
 }
 
+float ASideScrollingCharacter::RestoreHealth(float RestoreAmount)
+{
+	if (RestoreAmount <= 0.0f || bPlayerDefeated || MaxHealth <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	const float PreviousHealth = CurrentHealth;
+	CurrentHealth = FMath::Clamp(CurrentHealth + RestoreAmount, 0.0f, MaxHealth);
+	const float RestoredAmount = CurrentHealth - PreviousHealth;
+
+	if (RestoredAmount > UE_KINDA_SMALL_NUMBER && bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, FString::Printf(TEXT("HP +%.0f  %.0f / %.0f"), RestoredAmount, CurrentHealth, MaxHealth));
+	}
+
+	return RestoredAmount;
+}
+
 float ASideScrollingCharacter::GetHealthPercent() const
 {
 	if (MaxHealth <= 0.0f)
@@ -2991,6 +3010,25 @@ float ASideScrollingCharacter::GetHealthPercent() const
 	}
 
 	return CurrentHealth / MaxHealth;
+}
+
+float ASideScrollingCharacter::RestoreMana(float RestoreAmount)
+{
+	if (RestoreAmount <= 0.0f || bPlayerDefeated || MaxMana <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	const float PreviousMana = CurrentMana;
+	CurrentMana = FMath::Clamp(CurrentMana + RestoreAmount, 0.0f, MaxMana);
+	const float RestoredAmount = CurrentMana - PreviousMana;
+
+	if (RestoredAmount > UE_KINDA_SMALL_NUMBER && bShowGameplayDebugMessages && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Blue, FString::Printf(TEXT("Mana +%.0f  %.0f / %.0f"), RestoredAmount, CurrentMana, MaxMana));
+	}
+
+	return RestoredAmount;
 }
 
 bool ASideScrollingCharacter::IsPlayerDefeated() const

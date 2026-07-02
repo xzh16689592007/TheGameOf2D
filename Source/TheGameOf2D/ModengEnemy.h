@@ -7,6 +7,7 @@
 #include "ModengEnemy.generated.h"
 
 class AModengLantern;
+class AModengPotionPickup;
 class ASideScrollingCharacter;
 class UAnimInstance;
 class UAnimSequenceBase;
@@ -57,6 +58,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Movement", meta = (ClampMin = "0.0"))
 	float MoveSpeed = 180.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Movement", meta = (ClampMin = "0.0"))
+	float GroundGravityScale = 1.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Movement", meta = (ClampMin = "0.0", ClampMax = "89.0", Units = "deg"))
+	float WalkableFloorAngle = 75.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Movement", meta = (ClampMin = "0.0"))
+	float MaxStepHeight = 55.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Attack", meta = (ClampMin = "0.0"))
 	float AttackRange = 110.0f;
 
@@ -83,6 +93,27 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Reward", meta = (ClampMin = "0"))
 	int32 InkReward = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops")
+	TSubclassOf<AModengPotionPickup> PotionPickupClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PotionDropChance = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops", meta = (ClampMin = "0.0"))
+	float HealthPotionWeight = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops", meta = (ClampMin = "0.0"))
+	float ManaPotionWeight = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops", meta = (ClampMin = "0.0"))
+	float HealthPotionRestoreAmount = 30.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops", meta = (ClampMin = "0.0"))
+	float ManaPotionRestoreAmount = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Drops")
+	FVector PotionDropOffset = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enemy|Visual")
 	FVector EnemyBodyScale = FVector(0.8f, 0.8f, 1.5f);
@@ -219,6 +250,7 @@ protected:
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
 	virtual void ApplyEnemyLoadout();
+	void ConfigureGroundMovement();
 	AActor* GetCurrentTargetActor() const;
 	bool IsCurrentTargetValid() const;
 	bool IsActorInAttackRange(const AActor* Actor, float ExtraRange = 0.0f, float PlayerHeightToleranceOverride = -1.0f) const;
@@ -247,6 +279,8 @@ protected:
 	void PlayLoopingAnimation(UAnimSequenceBase* Animation);
 	void ResumeLocomotionAnimation();
 	void FinishDeath();
+	void TryDropPotion();
+	FVector GetPotionDropLocation() const;
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Enemy")

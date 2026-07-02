@@ -652,8 +652,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
 	bool ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource = nullptr);
 
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
+	float RestoreHealth(float RestoreAmount);
+
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
 	float GetHealthPercent() const;
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Skill")
+	float RestoreMana(float RestoreAmount);
 
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Health")
 	bool IsPlayerDefeated() const;
