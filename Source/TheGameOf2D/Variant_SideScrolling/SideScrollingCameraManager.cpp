@@ -23,8 +23,8 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 	if (IsValid(TargetPawn))
 	{
 		// set the view target FOV and rotation
-		OutVT.POV.Rotation = FRotator(0.0f, -90.0f, 0.0f);
-		OutVT.POV.FOV = 65.0f;
+		OutVT.POV.Rotation = FRotator(CameraPitch, CameraYaw, 0.0f);
+		OutVT.POV.FOV = CameraFOV;
 
 		// cache the current location
 		FVector CurrentActorLocation = OutVT.Target->GetActorLocation();
@@ -52,7 +52,7 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 			OutVT.POV.Location.Z = CurrentActorLocation.Z + CameraZOffset;
 
 			// save the current camera height
-			CurrentZ = OutVT.POV.Location.Z;
+			CurrentZ = CurrentActorLocation.Z;
 
 			// skip the rest of the calculations
 			return;
@@ -110,7 +110,7 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 		float CurrentX = FMath::Clamp(CurrentActorLocation.X, EffectiveCameraXMinBounds, CameraXMaxBounds);
 
 		// blend towards the new camera location and update the output
-		FVector TargetCameraLocation(CurrentX, CurrentY, CurrentZ);
+		FVector TargetCameraLocation(CurrentX, CurrentY, CurrentZ + CameraZOffset);
 
 		OutVT.POV.Location = FMath::VInterpTo(CurrentCameraLocation, TargetCameraLocation, DeltaTime, 2.0f);
 	}

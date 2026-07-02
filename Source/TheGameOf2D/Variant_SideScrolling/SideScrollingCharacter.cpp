@@ -250,7 +250,8 @@ void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* P
 
 	PlayerInputComponent->BindKey(EKeys::J, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoAttack);
-	PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ASideScrollingCharacter::DoRoll);
+	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ASideScrollingCharacter::DoRoll);
+	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Pressed, this, &ASideScrollingCharacter::DoRoll);
 	PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &ASideScrollingCharacter::DoSkill1);
 	PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ASideScrollingCharacter::DoSkill2);
 	PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ASideScrollingCharacter::DoSkill3);
