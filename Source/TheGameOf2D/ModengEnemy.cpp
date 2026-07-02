@@ -19,6 +19,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "ModengGameInstance.h"
 #include "ModengLantern.h"
 #include "ModengEnemyHealthWidget.h"
 #include "ModengPotionPickup.h"
@@ -152,13 +153,23 @@ void AModengEnemy::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyEnemyLoadout();
-	CurrentHealth = FMath::Clamp(CurrentHealth <= 0.0f ? MaxHealth : CurrentHealth, 0.0f, MaxHealth);
+	const float HealthPercentBeforeDifficulty = MaxHealth > 0.0f
+		? FMath::Clamp(CurrentHealth <= 0.0f ? 1.0f : CurrentHealth / MaxHealth, 0.0f, 1.0f)
+		: 1.0f;
+	MaxHealth *= FMath::Max(0.01f, GetDifficultyHealthMultiplier());
+	CurrentHealth = FMath::Clamp(MaxHealth * HealthPercentBeforeDifficulty, 0.0f, MaxHealth);
 	ConfigureGroundMovement();
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	ConfigureEnemyVisuals();
 	InitializeHealthBar();
 	UpdateLocomotionAnimation(false);
 	FindTarget();
+}
+
+float AModengEnemy::GetDifficultyHealthMultiplier() const
+{
+	const UModengGameInstance* ModengGameInstance = GetGameInstance<UModengGameInstance>();
+	return ModengGameInstance ? ModengGameInstance->GetEnemyHealthMultiplier() : 1.0f;
 }
 
 void AModengEnemy::ConfigureGroundMovement()

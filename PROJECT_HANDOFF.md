@@ -680,6 +680,42 @@ Current player update in this handoff:
   - `Result: Succeeded`
 - `outputs/` and `Week2_Report_Modeng.docx` are local report-generation artifacts and should not be included in gameplay commits.
 
+## 2026-07-02 UI, Audio, And Difficulty Merge Notes
+
+- This update adds the current menu/UI/audio pass and is intended to be merged directly into `main`.
+- New/updated maps and UI assets:
+  - Main menu map: `Content/Map_MainMenu.umap`.
+  - UMG widgets: `Content/WBP_MainMenu.uasset`, `Content/WBP_HUD.uasset`, `Content/WBP_PauseMenu_1.uasset`, `Content/WBP_PauseMenu_2.uasset`, `Content/WBP_Result_Win_1.uasset`, `Content/WBP_Result_Win_2.uasset`, `Content/WBP_Result_Lose_1.uasset`, and `Content/WBP_Result_Lose_2.uasset`.
+  - UI art/font assets live under `Content/UI`.
+  - Level 2 intro sequence asset added at `Content/MoDeng/Cinematics/LS_Level02_Intro.uasset`; Level 1 intro sequence was also updated.
+- New audio assets:
+  - Imported cue-style sound assets under `Content/Audio/BGM`, `Content/Audio/SFX`, `Content/Audio/UI`, and `Content/Audio/Feedback`.
+  - Imported music sources and UE sound assets under `Content/Music`; the active BGM subsystem currently loads music from `Content/Music/BGM`.
+  - These files are covered by `.gitattributes` and should be stored through Git LFS. Fresh clones still need `git lfs pull`.
+- New C++ classes:
+  - `UModengGameInstance`: stores selected difficulty and exposes player/enemy/Boss health and wave pacing multipliers.
+  - `UModengBGMSubsystem`: handles main-menu music, battle/late-wave/Boss BGM switching, fade out, and music/SFX volume values.
+  - `UMainMenuWidget`: wires Start, Settings, Quit, difficulty selection, and volume sliders for `WBP_MainMenu`.
+  - `UHUDWidget`: drives imported HUD text, currently keeps only the centered wave text visible from the UMG HUD while native Canvas HUD still handles gameplay bars.
+  - `UPauseWidget`: Resume, Restart, and Main Menu handlers for pause widgets.
+  - `UResultWidget`: shared win/lose/level-complete widget logic, including restart, next level, and main-menu navigation.
+- Gameplay/UI flow changes:
+  - `DefaultEngine.ini` now points the project at the new game instance and main menu flow.
+  - Main menu starts `L_Level01_Street` after choosing Easy, Normal, or Hard.
+  - `ASideScrollingPlayerController` now opens the pause menu with `Esc` or `P`, selects pause widget variants by level, plays Level 1 or Level 2 intro sequences, and applies lantern-durability-based camera post process.
+  - `AModengEnemySpawner` now applies difficulty wave bonuses, switches BGM by wave/Boss state, stops music on game end, and selects win/lose widgets by level.
+  - `ASideScrollingCharacter::PlayAttackHitSoundAtLocation()` now multiplies hit SFX by the `UModengBGMSubsystem` SFX volume.
+  - `AModengEnemy` and `AModengBossEnemy` apply difficulty health multipliers at `BeginPlay`.
+  - Native Canvas HUD now shows a smaller Chinese status panel plus world-space lantern durability bars.
+- Merge/test checklist for teammates:
+  - After pulling, run `git lfs pull` before opening Unreal.
+  - Open `Content/Map_MainMenu.umap`, start from the menu, and verify difficulty buttons enter Level 1.
+  - Verify Settings music/SFX sliders affect BGM and attack-hit SFX volume.
+  - Verify `Esc`/`P` pause, Resume, Restart, and Main Menu work in both Level 1 and Level 2.
+  - Clear Level 1 and confirm the win widget can open Level 2; lose/restart should reload the current level.
+  - In Level 2, confirm `LS_Level02_Intro` plays and Boss-wave BGM switches.
+  - Check lantern durability post process and overhead lantern bars in PIE, especially when lantern durability is low.
+
 ## Git Setup And Notes
 
 - `.gitignore` exists and ignores:

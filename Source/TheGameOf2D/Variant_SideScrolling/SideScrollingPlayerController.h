@@ -9,8 +9,10 @@
 
 class ASideScrollingCharacter;
 class ALevelSequenceActor;
+class UCameraComponent;
 class UInputMappingContext;
 class ULevelSequence;
+class UPauseWidget;
 
 /**
  *  A simple Side Scrolling Player Controller
@@ -62,12 +64,78 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Cinematics")
 	TSoftObjectPtr<ULevelSequence> OpeningCinematicSequence;
 
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	FName OpeningCinematicLevelTwoName = TEXT("L_Level02_BridgeMarket");
+
+	UPROPERTY(EditAnywhere, Category="Cinematics")
+	TSoftObjectPtr<ULevelSequence> OpeningCinematicSequenceLevelTwo;
+
 	/** Character class to respawn when the possessed pawn is destroyed */
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<ASideScrollingCharacter> CharacterClass;
 
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Interaction", meta = (ClampMin = "0.0"))
 	float LanternRepairReach = 500.0f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process")
+	bool bEnableLanternPostProcess = true;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LanternPostProcessInterpSpeed = 4.0f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "1500.0", ClampMax = "15000.0"))
+	float LitWhiteTemp = 4300.0f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "1500.0", ClampMax = "15000.0"))
+	float DarkWhiteTemp = 12500.0f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LitExposureBias = 0.75f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process")
+	float DarkExposureBias = -2.25f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LitSaturation = 1.35f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float DarkSaturation = 0.12f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LitContrast = 1.08f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float DarkContrast = 0.72f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LitGamma = 1.04f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float DarkGamma = 0.72f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float LitVignetteIntensity = 0.08f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0"))
+	float DarkVignetteIntensity = 0.82f;
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process")
+	FLinearColor LitSceneTint = FLinearColor(1.35f, 1.06f, 0.72f, 1.0f);
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process")
+	FLinearColor DarkSceneTint = FLinearColor(0.34f, 0.46f, 0.82f, 1.0f);
+
+	UPROPERTY(EditAnywhere, Category="Rendering|Lantern Post Process", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LowestLanternInfluence = 0.45f;
+
+	UPROPERTY(EditAnywhere, Category="UI")
+	TSubclassOf<UPauseWidget> PauseMenuClassLevelOne;
+
+	UPROPERTY(EditAnywhere, Category="UI")
+	TSubclassOf<UPauseWidget> PauseMenuClassLevelTwo;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPauseWidget> PauseMenuWidget;
 
 protected:
 
@@ -87,6 +155,10 @@ protected:
 	void OnPawnDestroyed(AActor* DestroyedActor);
 
 	void TryRepairNearestLantern();
+	void TogglePauseMenu();
+	void ShowPauseMenu();
+	void HidePauseMenu();
+	TSubclassOf<UPauseWidget> GetPauseMenuClassForCurrentLevel() const;
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
@@ -95,8 +167,13 @@ protected:
 	void SetCinematicInputLocked(bool bLocked);
 	bool IsCurrentLevel(FName LevelName) const;
 	void TryPlayOpeningCinematic();
+	TSoftObjectPtr<ULevelSequence> GetOpeningCinematicSequenceForCurrentLevel() const;
+	void UpdateLanternPostProcess(float DeltaSeconds);
+	float ComputeLanternLightLevel() const;
+	UCameraComponent* GetControlledCamera() const;
 
 	bool bCinematicInputLocked = false;
+	float SmoothedLanternLightLevel = 1.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ALevelSequenceActor> ActiveOpeningCinematicActor = nullptr;

@@ -55,72 +55,31 @@ void AModengHUD::DrawHUD()
 		}
 	}
 
-	int32 TotalLanterns = 0;
-	int32 LitLanterns = 0;
-	float DurabilityTotal = 0.0f;
-	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
-	{
-		const AModengLantern* Lantern = *It;
-		if (!Lantern)
-		{
-			continue;
-		}
-
-		TotalLanterns++;
-		if (!Lantern->IsExtinguished())
-		{
-			LitLanterns++;
-		}
-		DurabilityTotal += Lantern->GetDurabilityPercent();
-	}
-
-	AModengEnemySpawner* Spawner = nullptr;
-	for (TActorIterator<AModengEnemySpawner> It(GetWorld()); It; ++It)
-	{
-		Spawner = *It;
-		break;
-	}
-
 	const ASideScrollingCharacter* Player = Cast<ASideScrollingCharacter>(GetOwningPawn());
 	if (!Player && GetOwningPlayerController())
 	{
 		Player = Cast<ASideScrollingCharacter>(GetOwningPlayerController()->GetPawn());
 	}
 
-	FCanvasTileItem Panel(FVector2D(PanelX - 12.0f, PanelY - 12.0f), FVector2D(330.0f, 196.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
+	FCanvasTileItem Panel(FVector2D(PanelX - 12.0f, PanelY - 12.0f), FVector2D(330.0f, 92.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.45f));
 	Panel.BlendMode = SE_BLEND_Translucent;
 	Canvas->DrawItem(Panel);
 
-	if (Spawner)
-	{
-		DrawStatusLine(FString::Printf(TEXT("Wave: %d / %d"), Spawner->GetCurrentWave(), Spawner->GetTotalWaves()), 0, FLinearColor(0.55f, 0.9f, 1.0f));
-		DrawStatusLine(FString::Printf(TEXT("Wave Spawned: %d / %d"), Spawner->GetEnemiesSpawnedThisWave(), Spawner->GetEnemiesToSpawnThisWave()), 1, FLinearColor::White);
-	}
-	else
-	{
-		DrawStatusLine(TEXT("Wave: no spawner"), 0, FLinearColor::Yellow);
-		DrawStatusLine(TEXT("Wave Spawned: --"), 1, FLinearColor::White);
-	}
-
-	DrawStatusLine(FString::Printf(TEXT("Enemies Alive: %d"), AliveEnemies), 2, AliveEnemies > 0 ? FLinearColor(1.0f, 0.45f, 0.25f) : FLinearColor::Green);
-
-	const float AverageDurability = TotalLanterns > 0 ? DurabilityTotal / TotalLanterns : 0.0f;
-	DrawStatusLine(FString::Printf(TEXT("Lanterns: %d / %d  Avg: %.0f%%"), LitLanterns, TotalLanterns, AverageDurability * 100.0f), 3, LitLanterns > 0 ? FLinearColor(1.0f, 0.75f, 0.25f) : FLinearColor::Red);
+	DrawStatusLine(FString::Printf(TEXT("存活敌人：%d"), AliveEnemies), 0, AliveEnemies > 0 ? FLinearColor(1.0f, 0.45f, 0.25f) : FLinearColor::Green);
 
 	if (Player)
 	{
-		DrawStatusLine(FString::Printf(TEXT("Weapon Lv.%d  Ink: %d"), Player->GetWeaponLevel(), Player->GetCurrentInk()), 4, FLinearColor(0.75f, 0.55f, 1.0f));
-		DrawStatusLine(FString::Printf(TEXT("Damage: %.0f  Range: %.0f"), Player->GetCurrentAttackDamage(), Player->GetCurrentAttackRange()), 5, FLinearColor::White);
-		DrawStatusLine(FString::Printf(TEXT("Player HP: %.0f%%"), Player->GetHealthPercent() * 100.0f), 6, Player->GetHealthPercent() > 0.3f ? FLinearColor(0.35f, 1.0f, 0.55f) : FLinearColor::Red);
+		DrawStatusLine(FString::Printf(TEXT("武器等级：%d  经验：%d"), Player->GetWeaponLevel(), Player->GetCurrentInk()), 1, FLinearColor(0.75f, 0.55f, 1.0f));
+		DrawStatusLine(FString::Printf(TEXT("伤害：%.0f"), Player->GetCurrentAttackDamage()), 2, FLinearColor::White);
 	}
 	else
 	{
-		DrawStatusLine(TEXT("Weapon: --"), 4, FLinearColor::White);
-		DrawStatusLine(TEXT("Damage: --"), 5, FLinearColor::White);
-		DrawStatusLine(TEXT("Player HP: --"), 6, FLinearColor::White);
+		DrawStatusLine(TEXT("武器等级：--  经验：--"), 1, FLinearColor::White);
+		DrawStatusLine(TEXT("伤害：--"), 2, FLinearColor::White);
 	}
 
 	DrawPlayerStatusBars(Player);
+	DrawLanternHealthBars();
 	DrawLanternRepairPrompt();
 }
 
@@ -275,6 +234,60 @@ void AModengHUD::DrawSkillIcon(const FVector2D& Position, int32 SkillIndex, cons
 	CostItem.EnableShadow(FLinearColor::Black);
 	CostItem.Scale = FVector2D(0.8f, 0.8f);
 	Canvas->DrawItem(CostItem);
+}
+
+void AModengHUD::DrawLanternHealthBars() const
+{
+	if (!Canvas || !GetWorld())
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = GetOwningPlayerController();
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	constexpr float BarWidth = 92.0f;
+	constexpr float BarHeight = 8.0f;
+	constexpr float InnerPadding = 1.5f;
+	const FVector WorldOffset(0.0f, 0.0f, 170.0f);
+
+	for (TActorIterator<AModengLantern> It(GetWorld()); It; ++It)
+	{
+		const AModengLantern* Lantern = *It;
+		if (!Lantern)
+		{
+			continue;
+		}
+
+		FVector2D ScreenLocation;
+		if (!PlayerController->ProjectWorldLocationToScreen(Lantern->GetActorLocation() + WorldOffset, ScreenLocation))
+		{
+			continue;
+		}
+
+		const float Percent = FMath::Clamp(Lantern->GetDurabilityPercent(), 0.0f, 1.0f);
+		const FVector2D BarPosition(ScreenLocation.X - BarWidth * 0.5f, ScreenLocation.Y);
+		const FVector2D BarSize(BarWidth, BarHeight);
+
+		FCanvasTileItem Backdrop(BarPosition, BarSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.38f));
+		Backdrop.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Backdrop);
+
+		const FLinearColor FillColor = Percent > 0.5f
+			? FLinearColor(0.18f, 0.9f, 0.42f, 0.72f)
+			: (Percent > 0.25f ? FLinearColor(1.0f, 0.74f, 0.18f, 0.76f) : FLinearColor(1.0f, 0.18f, 0.12f, 0.78f));
+		const FVector2D FillPosition = BarPosition + FVector2D(InnerPadding, InnerPadding);
+		const FVector2D FillSize(FMath::Max(0.0f, (BarWidth - InnerPadding * 2.0f) * Percent), BarHeight - InnerPadding * 2.0f);
+		if (FillSize.X > 0.0f)
+		{
+			FCanvasTileItem Fill(FillPosition, FillSize, FillColor);
+			Fill.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Fill);
+		}
+	}
 }
 
 void AModengHUD::DrawLanternRepairPrompt() const

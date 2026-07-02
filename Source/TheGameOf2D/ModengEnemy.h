@@ -250,6 +250,7 @@ protected:
 	virtual void AttackTarget(float DeltaSeconds);
 	virtual void Die();
 	virtual void ApplyEnemyLoadout();
+	virtual float GetDifficultyHealthMultiplier() const;
 	void ConfigureGroundMovement();
 	AActor* GetCurrentTargetActor() const;
 	bool IsCurrentTargetValid() const;

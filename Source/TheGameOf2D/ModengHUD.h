@@ -71,6 +71,7 @@ protected:
 	void DrawPlayerStatusBars(const class ASideScrollingCharacter* Player);
 	void DrawStatusBar(const FVector2D& Position, const FVector2D& Size, float Percent, const FLinearColor& FillColor, const FString& Label) const;
 	void DrawSkillIcon(const FVector2D& Position, int32 SkillIndex, const class ASideScrollingCharacter* Player, UTexture2D* IconTexture) const;
+	void DrawLanternHealthBars() const;
 	void DrawLanternRepairPrompt() const;
 	UTexture2D* GetSkillIconTexture(int32 SkillIndex);
 };

@@ -31,6 +31,7 @@ protected:
 	virtual void AttackTarget(float DeltaSeconds) override;
 	virtual void Die() override;
 	virtual void ApplyEnemyLoadout() override;
+	virtual float GetDifficultyHealthMultiplier() const override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Melee", meta = (ClampMin = "0.0"))
 	float ScytheDamageDelay = 0.42f;

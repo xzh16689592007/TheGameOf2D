@@ -4,6 +4,8 @@
 #include "SideScrollingPlayerController.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
+#include "PauseWidget.h"
+#include "Camera/CameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
 #include "SideScrollingCharacter.h"
@@ -17,11 +19,25 @@
 #include "MovieSceneSequencePlayer.h"
 #include "Blueprint/UserWidget.h"
 #include "TheGameOf2D.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
 ASideScrollingPlayerController::ASideScrollingPlayerController()
 {
 	OpeningCinematicSequence = TSoftObjectPtr<ULevelSequence>(FSoftObjectPath(TEXT("/Game/MoDeng/Cinematics/LS_Level01_Intro.LS_Level01_Intro")));
+	OpeningCinematicSequenceLevelTwo = TSoftObjectPtr<ULevelSequence>(FSoftObjectPath(TEXT("/Game/MoDeng/Cinematics/LS_Level02_Intro.LS_Level02_Intro")));
+
+	static ConstructorHelpers::FClassFinder<UPauseWidget> PauseMenuOneFinder(TEXT("/Game/WBP_PauseMenu_1"));
+	if (PauseMenuOneFinder.Succeeded())
+	{
+		PauseMenuClassLevelOne = PauseMenuOneFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UPauseWidget> PauseMenuTwoFinder(TEXT("/Game/WBP_PauseMenu_2"));
+	if (PauseMenuTwoFinder.Succeeded())
+	{
+		PauseMenuClassLevelTwo = PauseMenuTwoFinder.Class;
+	}
 }
 
 void ASideScrollingPlayerController::BeginPlay()
@@ -47,6 +63,8 @@ void ASideScrollingPlayerController::BeginPlay()
 
 	}
 
+	SmoothedLanternLightLevel = ComputeLanternLightLevel();
+	UpdateLanternPostProcess(0.0f);
 	TryPlayOpeningCinematic();
 }
 
@@ -58,6 +76,8 @@ void ASideScrollingPlayerController::Tick(float DeltaSeconds)
 	{
 		SetCinematicInputLocked(IsAnyLevelSequencePlaying());
 	}
+
+	UpdateLanternPostProcess(DeltaSeconds);
 }
 
 void ASideScrollingPlayerController::SetupInputComponent()
@@ -65,6 +85,8 @@ void ASideScrollingPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ASideScrollingPlayerController::TryRepairNearestLantern);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
+	InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
 
 	// only add IMCs for local player controllers
 	if (IsLocalPlayerController())
@@ -87,6 +109,75 @@ void ASideScrollingPlayerController::SetupInputComponent()
 			}
 		}
 	}
+}
+
+void ASideScrollingPlayerController::TogglePauseMenu()
+{
+	if (!IsLocalPlayerController() || bCinematicInputLocked)
+	{
+		return;
+	}
+
+	if (PauseMenuWidget && PauseMenuWidget->IsInViewport())
+	{
+		HidePauseMenu();
+		return;
+	}
+
+	ShowPauseMenu();
+}
+
+void ASideScrollingPlayerController::ShowPauseMenu()
+{
+	TSubclassOf<UPauseWidget> PauseClass = GetPauseMenuClassForCurrentLevel();
+	if (!PauseClass)
+	{
+		return;
+	}
+
+	if (!PauseMenuWidget || PauseMenuWidget->GetClass() != PauseClass)
+	{
+		PauseMenuWidget = CreateWidget<UPauseWidget>(this, PauseClass);
+	}
+
+	if (!PauseMenuWidget)
+	{
+		return;
+	}
+
+	if (!PauseMenuWidget->IsInViewport())
+	{
+		PauseMenuWidget->AddToViewport(90);
+	}
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(PauseMenuWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+	SetShowMouseCursor(true);
+	SetPause(true);
+}
+
+void ASideScrollingPlayerController::HidePauseMenu()
+{
+	if (PauseMenuWidget)
+	{
+		PauseMenuWidget->RemoveFromParent();
+	}
+
+	SetPause(false);
+	SetInputMode(FInputModeGameOnly());
+	SetShowMouseCursor(false);
+}
+
+TSubclassOf<UPauseWidget> ASideScrollingPlayerController::GetPauseMenuClassForCurrentLevel() const
+{
+	if (IsCurrentLevel(TEXT("L_Level02_BridgeMarket")) && PauseMenuClassLevelTwo)
+	{
+		return PauseMenuClassLevelTwo;
+	}
+
+	return PauseMenuClassLevelOne ? PauseMenuClassLevelOne : PauseMenuClassLevelTwo;
 }
 
 void ASideScrollingPlayerController::TryRepairNearestLantern()
@@ -222,12 +313,18 @@ bool ASideScrollingPlayerController::IsCurrentLevel(FName LevelName) const
 
 void ASideScrollingPlayerController::TryPlayOpeningCinematic()
 {
-	if (!bAutoPlayOpeningCinematic || !IsLocalPlayerController() || !IsCurrentLevel(OpeningCinematicLevelName) || IsAnyLevelSequencePlaying())
+	if (!bAutoPlayOpeningCinematic || !IsLocalPlayerController() || IsAnyLevelSequencePlaying())
 	{
 		return;
 	}
 
-	ULevelSequence* LevelSequence = OpeningCinematicSequence.LoadSynchronous();
+	TSoftObjectPtr<ULevelSequence> LevelSequenceAsset = GetOpeningCinematicSequenceForCurrentLevel();
+	if (LevelSequenceAsset.IsNull())
+	{
+		return;
+	}
+
+	ULevelSequence* LevelSequence = LevelSequenceAsset.LoadSynchronous();
 	if (!LevelSequence || !GetWorld())
 	{
 		return;
@@ -243,4 +340,111 @@ void ASideScrollingPlayerController::TryPlayOpeningCinematic()
 
 	ActiveOpeningCinematicActor = SequenceActor;
 	SequencePlayer->Play();
+}
+
+TSoftObjectPtr<ULevelSequence> ASideScrollingPlayerController::GetOpeningCinematicSequenceForCurrentLevel() const
+{
+	if (IsCurrentLevel(OpeningCinematicLevelTwoName))
+	{
+		return OpeningCinematicSequenceLevelTwo;
+	}
+
+	if (IsCurrentLevel(OpeningCinematicLevelName))
+	{
+		return OpeningCinematicSequence;
+	}
+
+	return nullptr;
+}
+
+void ASideScrollingPlayerController::UpdateLanternPostProcess(float DeltaSeconds)
+{
+	if (!bEnableLanternPostProcess || !IsLocalPlayerController())
+	{
+		return;
+	}
+
+	UCameraComponent* ControlledCamera = GetControlledCamera();
+	if (!ControlledCamera)
+	{
+		return;
+	}
+
+	const float TargetLightLevel = ComputeLanternLightLevel();
+	if (DeltaSeconds <= 0.0f)
+	{
+		SmoothedLanternLightLevel = TargetLightLevel;
+	}
+	else
+	{
+		SmoothedLanternLightLevel = FMath::FInterpTo(
+			SmoothedLanternLightLevel,
+			TargetLightLevel,
+			DeltaSeconds,
+			FMath::Max(0.0f, LanternPostProcessInterpSpeed));
+	}
+
+	const float LightLevel = FMath::Clamp(SmoothedLanternLightLevel, 0.0f, 1.0f);
+	FPostProcessSettings& Settings = ControlledCamera->PostProcessSettings;
+
+	Settings.bOverride_WhiteTemp = true;
+	Settings.bOverride_ColorSaturation = true;
+	Settings.bOverride_ColorContrast = true;
+	Settings.bOverride_ColorGamma = true;
+	Settings.bOverride_SceneColorTint = true;
+	Settings.bOverride_AutoExposureBias = true;
+	Settings.bOverride_VignetteIntensity = true;
+
+	Settings.WhiteTemp = FMath::Lerp(DarkWhiteTemp, LitWhiteTemp, LightLevel);
+	const float Saturation = FMath::Lerp(DarkSaturation, LitSaturation, LightLevel);
+	const float Contrast = FMath::Lerp(DarkContrast, LitContrast, LightLevel);
+	const float Gamma = FMath::Lerp(DarkGamma, LitGamma, LightLevel);
+	Settings.ColorSaturation = FVector4(Saturation, Saturation, Saturation, 1.0f);
+	Settings.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.0f);
+	Settings.ColorGamma = FVector4(Gamma, Gamma, Gamma, 1.0f);
+	Settings.SceneColorTint = FMath::Lerp(DarkSceneTint, LitSceneTint, LightLevel);
+	Settings.AutoExposureBias = FMath::Lerp(DarkExposureBias, LitExposureBias, LightLevel);
+	Settings.VignetteIntensity = FMath::Lerp(DarkVignetteIntensity, LitVignetteIntensity, LightLevel);
+	ControlledCamera->SetPostProcessBlendWeight(1.0f);
+}
+
+float ASideScrollingPlayerController::ComputeLanternLightLevel() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 1.0f;
+	}
+
+	float TotalDurabilityPercent = 0.0f;
+	float LowestDurabilityPercent = 1.0f;
+	int32 LanternCount = 0;
+	for (TActorIterator<AModengLantern> It(World); It; ++It)
+	{
+		const AModengLantern* Lantern = *It;
+		if (!Lantern)
+		{
+			continue;
+		}
+
+		const float DurabilityPercent = FMath::Clamp(Lantern->GetDurabilityPercent(), 0.0f, 1.0f);
+		TotalDurabilityPercent += DurabilityPercent;
+		LowestDurabilityPercent = FMath::Min(LowestDurabilityPercent, DurabilityPercent);
+		LanternCount++;
+	}
+
+	if (LanternCount <= 0)
+	{
+		return 1.0f;
+	}
+
+	const float AverageDurabilityPercent = TotalDurabilityPercent / static_cast<float>(LanternCount);
+	const float ClampedLowestInfluence = FMath::Clamp(LowestLanternInfluence, 0.0f, 1.0f);
+	return FMath::Lerp(AverageDurabilityPercent, LowestDurabilityPercent, ClampedLowestInfluence);
+}
+
+UCameraComponent* ASideScrollingPlayerController::GetControlledCamera() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	return ControlledPawn ? ControlledPawn->FindComponentByClass<UCameraComponent>() : nullptr;
 }

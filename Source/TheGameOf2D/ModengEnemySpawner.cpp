@@ -14,21 +14,48 @@
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
 #include "Misc/PackageName.h"
+#include "ModengBGMSubsystem.h"
 #include "ModengBossEnemy.h"
 #include "ModengEnemy.h"
 #include "ModengExploderEnemy.h"
 #include "ModengFastEnemy.h"
+#include "ModengGameInstance.h"
 #include "ModengLantern.h"
 #include "ModengRangedEnemy.h"
-#include "ModengResultWidget.h"
 #include "MovieSceneSequencePlayer.h"
+#include "ResultWidget.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
 
 AModengEnemySpawner::AModengEnemySpawner()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	ResultWidgetClass = UModengResultWidget::StaticClass();
+
+	static ConstructorHelpers::FClassFinder<UResultWidget> WinLevelOneFinder(TEXT("/Game/WBP_Result_Win_1"));
+	if (WinLevelOneFinder.Succeeded())
+	{
+		ResultWidgetWinLevelOneClass = WinLevelOneFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UResultWidget> LoseLevelOneFinder(TEXT("/Game/WBP_Result_Lose_1"));
+	if (LoseLevelOneFinder.Succeeded())
+	{
+		ResultWidgetLoseLevelOneClass = LoseLevelOneFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UResultWidget> WinLevelTwoFinder(TEXT("/Game/WBP_Result_Win_2"));
+	if (WinLevelTwoFinder.Succeeded())
+	{
+		ResultWidgetWinLevelTwoClass = WinLevelTwoFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UResultWidget> LoseLevelTwoFinder(TEXT("/Game/WBP_Result_Lose_2"));
+	if (LoseLevelTwoFinder.Succeeded())
+	{
+		ResultWidgetLoseLevelTwoClass = LoseLevelTwoFinder.Class;
+	}
+
 	EnemyTypes = {
 		AModengEnemy::StaticClass(),
 		AModengFastEnemy::StaticClass(),
@@ -43,6 +70,7 @@ void AModengEnemySpawner::BeginPlay()
 	Super::BeginPlay();
 
 	ApplyCurrentLevelDefaults();
+	ApplyDifficultyDefaults();
 
 	bool bHasRangedEnemy = false;
 	for (const TSubclassOf<AModengEnemy>& EnemyClass : EnemyTypes)
@@ -269,6 +297,11 @@ void AModengEnemySpawner::StartNextWave()
 	BossesToSpawnThisWave = ShouldSpawnBossThisWave() ? BossCountFinalWave : 0;
 	bWaveActive = true;
 
+	if (UModengBGMSubsystem* BGMSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UModengBGMSubsystem>() : nullptr)
+	{
+		BGMSubsystem->PlayBattleMusicForWave(CurrentWave, TotalWaves, BossesToSpawnThisWave > 0);
+	}
+
 	if (bShowGameplayDebugMessages && GEngine)
 	{
 		const FString Message = FString::Printf(TEXT("Wave %d started: %d enemies, %d boss"), CurrentWave, EnemiesToSpawnThisWave, BossesToSpawnThisWave);
@@ -458,6 +491,20 @@ void AModengEnemySpawner::ApplyCurrentLevelDefaults()
 	BossCountFinalWave = FMath::Max(BossCountFinalWave, 1);
 }
 
+void AModengEnemySpawner::ApplyDifficultyDefaults()
+{
+	const UModengGameInstance* ModengGameInstance = GetGameInstance<UModengGameInstance>();
+	if (!ModengGameInstance)
+	{
+		return;
+	}
+
+	BaseEnemiesPerWave += ModengGameInstance->GetBaseEnemiesPerWaveBonus();
+	ExtraEnemiesPerWave += ModengGameInstance->GetExtraEnemiesPerWaveBonus();
+	MaxAliveEnemies += ModengGameInstance->GetMaxAliveEnemiesBonus();
+	SpawnInterval = FMath::Max(0.35f, SpawnInterval * ModengGameInstance->GetSpawnIntervalMultiplier());
+}
+
 void AModengEnemySpawner::CheckWaveProgress()
 {
 	if (!bWaveActive)
@@ -540,6 +587,11 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 	GetWorld()->GetTimerManager().ClearTimer(VictoryResultTimer);
 	bVictoryResultPending = false;
 
+	if (UModengBGMSubsystem* BGMSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UModengBGMSubsystem>() : nullptr)
+	{
+		BGMSubsystem->StopMusic(0.85f);
+	}
+
 	if (bShowGameplayDebugMessages && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 8.0f, bPlayerWon ? FColor::Green : FColor::Red, bPlayerWon ? TEXT("Victory: all waves cleared") : TEXT("Defeat: all lanterns extinguished"));
@@ -574,28 +626,20 @@ void AModengEnemySpawner::ShowLevelCompleteWidget()
 		return;
 	}
 
-	if (!ResultWidget && ResultWidgetClass)
+	const TSubclassOf<UResultWidget> WidgetClass = GetResultWidgetClass(true);
+	if (!WidgetClass)
 	{
-		ResultWidget = CreateWidget<UModengResultWidget>(PlayerController, ResultWidgetClass);
+		return;
 	}
 
+	ResultWidget = CreateWidget<UResultWidget>(PlayerController, WidgetClass);
 	if (!ResultWidget)
 	{
 		return;
 	}
 
 	ResultWidget->SetLevelComplete(LevelTwoName);
-	if (!ResultWidget->IsInViewport())
-	{
-		ResultWidget->AddToViewport(100);
-	}
-
-	FInputModeUIOnly InputMode;
-	InputMode.SetWidgetToFocus(ResultWidget->TakeWidget());
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	PlayerController->SetInputMode(InputMode);
-	PlayerController->SetShowMouseCursor(true);
-	PlayerController->SetPause(true);
+	PresentResultWidget(ResultWidget, PlayerController);
 }
 
 void AModengEnemySpawner::ShowResultWidget(bool bPlayerWon)
@@ -606,24 +650,47 @@ void AModengEnemySpawner::ShowResultWidget(bool bPlayerWon)
 		return;
 	}
 
-	if (!ResultWidget && ResultWidgetClass)
+	const TSubclassOf<UResultWidget> WidgetClass = GetResultWidgetClass(bPlayerWon);
+	if (!WidgetClass)
 	{
-		ResultWidget = CreateWidget<UModengResultWidget>(PlayerController, ResultWidgetClass);
+		return;
 	}
 
+	ResultWidget = CreateWidget<UResultWidget>(PlayerController, WidgetClass);
 	if (!ResultWidget)
 	{
 		return;
 	}
 
 	ResultWidget->SetResult(bPlayerWon);
-	if (!ResultWidget->IsInViewport())
+	PresentResultWidget(ResultWidget, PlayerController);
+}
+
+TSubclassOf<UResultWidget> AModengEnemySpawner::GetResultWidgetClass(bool bPlayerWon) const
+{
+	const bool bSecondLevel = IsCurrentLevel(LevelTwoName);
+	if (bPlayerWon)
 	{
-		ResultWidget->AddToViewport(100);
+		return bSecondLevel && ResultWidgetWinLevelTwoClass ? ResultWidgetWinLevelTwoClass : ResultWidgetWinLevelOneClass;
+	}
+
+	return bSecondLevel && ResultWidgetLoseLevelTwoClass ? ResultWidgetLoseLevelTwoClass : ResultWidgetLoseLevelOneClass;
+}
+
+void AModengEnemySpawner::PresentResultWidget(UResultWidget* Widget, APlayerController* PlayerController) const
+{
+	if (!Widget || !PlayerController)
+	{
+		return;
+	}
+
+	if (!Widget->IsInViewport())
+	{
+		Widget->AddToViewport(100);
 	}
 
 	FInputModeUIOnly InputMode;
-	InputMode.SetWidgetToFocus(ResultWidget->TakeWidget());
+	InputMode.SetWidgetToFocus(Widget->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	PlayerController->SetInputMode(InputMode);
 	PlayerController->SetShowMouseCursor(true);

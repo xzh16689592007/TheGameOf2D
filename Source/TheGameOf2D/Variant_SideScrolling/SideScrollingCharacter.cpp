@@ -24,6 +24,8 @@
 #include "DrawDebugHelpers.h"
 #include "Components/SceneComponent.h"
 #include "ModengEnemy.h"
+#include "ModengBGMSubsystem.h"
+#include "ModengGameInstance.h"
 #include "ModengLantern.h"
 #include "SideScrollingInteractable.h"
 #include "Kismet/GameplayStatics.h"
@@ -154,6 +156,10 @@ void ASideScrollingCharacter::BeginPlay()
 
 	const float HealthMultiplier = FMath::Max(1.0f, HealthTestMultiplier);
 	MaxHealth *= HealthMultiplier;
+	if (const UModengGameInstance* ModengGameInstance = GetGameInstance<UModengGameInstance>())
+	{
+		MaxHealth *= FMath::Max(0.01f, ModengGameInstance->GetPlayerHealthMultiplier());
+	}
 	CurrentHealth = MaxHealth;
 	CurrentMana = FMath::Clamp(CurrentMana, 0.0f, MaxMana);
 
@@ -2947,7 +2953,9 @@ void ASideScrollingCharacter::PlayAttackHitSoundAtLocation(FVector HitLocation)
 		return;
 	}
 
-	UGameplayStatics::PlaySoundAtLocation(this, AttackHitSound, HitLocation, AttackHitSoundVolume, AttackHitSoundPitch);
+	const UModengBGMSubsystem* BGMSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UModengBGMSubsystem>() : nullptr;
+	const float SFXVolume = BGMSubsystem ? BGMSubsystem->GetSFXVolume() : 1.0f;
+	UGameplayStatics::PlaySoundAtLocation(this, AttackHitSound, HitLocation, AttackHitSoundVolume * SFXVolume, AttackHitSoundPitch);
 }
 
 bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource)

@@ -7,6 +7,7 @@
 #include "SideScrollingGameMode.generated.h"
 
 class USideScrollingUI;
+class UHUDWidget;
 
 /**
  *  Simple Side Scrolling Game Mode
@@ -27,6 +28,12 @@ protected:
 	/** User interface widget for the game */
 	UPROPERTY(BlueprintReadOnly, Category="UI")
 	TObjectPtr<USideScrollingUI> UserInterface;
+
+	UPROPERTY(EditAnywhere, Category="UI")
+	TSubclassOf<UHUDWidget> HUDWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly, Category="UI")
+	TObjectPtr<UHUDWidget> HUDWidget;
 
 	/** Number of pickups collected by the player */
 	UPROPERTY(BlueprintReadOnly, Category="Pickups")

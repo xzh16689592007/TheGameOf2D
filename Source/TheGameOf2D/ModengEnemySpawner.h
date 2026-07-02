@@ -7,8 +7,9 @@
 #include "ModengEnemySpawner.generated.h"
 
 class AModengEnemy;
+class APlayerController;
 class ASideScrollingCharacter;
-class UModengResultWidget;
+class UResultWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FModengGameEndedSignature, bool, bPlayerWon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FModengGameResultSignature);
@@ -116,7 +117,16 @@ protected:
 	bool bPauseSpawningDuringCinematics = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
-	TSubclassOf<UModengResultWidget> ResultWidgetClass;
+	TSubclassOf<UResultWidget> ResultWidgetWinLevelOneClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
+	TSubclassOf<UResultWidget> ResultWidgetLoseLevelOneClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
+	TSubclassOf<UResultWidget> ResultWidgetWinLevelTwoClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
+	TSubclassOf<UResultWidget> ResultWidgetLoseLevelTwoClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI", meta = (ClampMin = "0.0"))
 	float VictoryResultDelay = 2.0f;
@@ -138,7 +148,7 @@ protected:
 	FTimerHandle LevelTravelTimer;
 	FTimerHandle VictoryResultTimer;
 	UPROPERTY(Transient)
-	TObjectPtr<UModengResultWidget> ResultWidget;
+	TObjectPtr<UResultWidget> ResultWidget;
 
 	bool bWaveActive = false;
 	bool bGameEnded = false;
@@ -170,6 +180,7 @@ protected:
 	bool ShouldShowLevelCompleteMenuOnVictory() const;
 	bool IsAnyCinematicPlaying() const;
 	void ApplyCurrentLevelDefaults();
+	void ApplyDifficultyDefaults();
 	void CheckWaveProgress();
 	UFUNCTION()
 	void HandlePlayerDeathAnimationFinished();
@@ -178,4 +189,6 @@ protected:
 	void EndGame(bool bPlayerWon);
 	void ShowResultWidget(bool bPlayerWon);
 	void ShowLevelCompleteWidget();
+	TSubclassOf<UResultWidget> GetResultWidgetClass(bool bPlayerWon) const;
+	void PresentResultWidget(UResultWidget* Widget, APlayerController* PlayerController) const;
 };

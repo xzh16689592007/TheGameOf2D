@@ -16,6 +16,7 @@
 #include "ModengBossFireField.h"
 #include "ModengExplosionEffect.h"
 #include "ModengFastEnemy.h"
+#include "ModengGameInstance.h"
 #include "ModengLantern.h"
 #include "ModengMagicProjectile.h"
 #include "NiagaraComponent.h"
@@ -226,6 +227,12 @@ void AModengBossEnemy::Die()
 void AModengBossEnemy::ApplyEnemyLoadout()
 {
 	ApplyBossLoadout();
+}
+
+float AModengBossEnemy::GetDifficultyHealthMultiplier() const
+{
+	const UModengGameInstance* ModengGameInstance = GetGameInstance<UModengGameInstance>();
+	return ModengGameInstance ? ModengGameInstance->GetBossHealthMultiplier() : 1.0f;
 }
 
 void AModengBossEnemy::ApplyBossLoadout()
