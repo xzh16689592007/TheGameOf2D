@@ -8,17 +8,33 @@
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
-#include "HAL/FileManager.h"
-#include "IImageWrapper.h"
-#include "IImageWrapperModule.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "Modules/ModuleManager.h"
+#include "UObject/ConstructorHelpers.h"
 #include "GameFramework/PlayerController.h"
 #include "ModengEnemy.h"
 #include "ModengEnemySpawner.h"
 #include "ModengLantern.h"
 #include "Variant_SideScrolling/SideScrollingCharacter.h"
+
+AModengHUD::AModengHUD()
+{
+	static ConstructorHelpers::FObjectFinder<UTexture2D> Skill1IconFinder(TEXT("/Game/MoDeng/UI/SkillIcons/Skill1.Skill1"));
+	if (Skill1IconFinder.Succeeded())
+	{
+		Skill1IconTexture = Skill1IconFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> Skill2IconFinder(TEXT("/Game/MoDeng/UI/SkillIcons/Skill2.Skill2"));
+	if (Skill2IconFinder.Succeeded())
+	{
+		Skill2IconTexture = Skill2IconFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> Skill3IconFinder(TEXT("/Game/MoDeng/UI/SkillIcons/Skill3.Skill3"));
+	if (Skill3IconFinder.Succeeded())
+	{
+		Skill3IconTexture = Skill3IconFinder.Object;
+	}
+}
 
 void AModengHUD::DrawHUD()
 {
@@ -323,82 +339,18 @@ UTexture2D* AModengHUD::GetSkillIconTexture(int32 SkillIndex)
 {
 	if (SkillIndex == 1)
 	{
-		if (!Skill1IconTexture)
-		{
-			Skill1IconTexture = LoadSkillIconTexture(Skill1IconFile);
-		}
 		return Skill1IconTexture;
 	}
 
 	if (SkillIndex == 2)
 	{
-		if (!Skill2IconTexture)
-		{
-			Skill2IconTexture = LoadSkillIconTexture(Skill2IconFile);
-		}
 		return Skill2IconTexture;
 	}
 
 	if (SkillIndex == 3)
 	{
-		if (!Skill3IconTexture)
-		{
-			Skill3IconTexture = LoadSkillIconTexture(Skill3IconFile);
-		}
-
 		return Skill3IconTexture;
 	}
 
 	return nullptr;
-}
-
-UTexture2D* AModengHUD::LoadSkillIconTexture(const FString& RelativeContentFile) const
-{
-	if (RelativeContentFile.IsEmpty())
-	{
-		return nullptr;
-	}
-
-	const FString FullPath = FPaths::Combine(FPaths::ProjectContentDir(), RelativeContentFile);
-	if (!IFileManager::Get().FileExists(*FullPath))
-	{
-		return nullptr;
-	}
-
-	TArray<uint8> FileData;
-	if (!FFileHelper::LoadFileToArray(FileData, *FullPath))
-	{
-		return nullptr;
-	}
-
-	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName(TEXT("ImageWrapper")));
-	const EImageFormat ImageFormat = ImageWrapperModule.DetectImageFormat(FileData.GetData(), FileData.Num());
-	if (ImageFormat == EImageFormat::Invalid)
-	{
-		return nullptr;
-	}
-
-	TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(ImageFormat);
-	if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(FileData.GetData(), FileData.Num()))
-	{
-		return nullptr;
-	}
-
-	TArray64<uint8> RawData;
-	if (!ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData))
-	{
-		return nullptr;
-	}
-
-	UTexture2D* Texture = UTexture2D::CreateTransient(ImageWrapper->GetWidth(), ImageWrapper->GetHeight(), PF_B8G8R8A8);
-	if (!Texture || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.Num() == 0)
-	{
-		return nullptr;
-	}
-
-	void* TextureData = Texture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-	FMemory::Memcpy(TextureData, RawData.GetData(), RawData.Num());
-	Texture->GetPlatformData()->Mips[0].BulkData.Unlock();
-	Texture->UpdateResource();
-	return Texture;
 }
