@@ -88,7 +88,7 @@ void AModengEnemySpawner::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (bGameEnded)
+	if (bGameEnded || bVictoryResultPending)
 	{
 		return;
 	}
@@ -480,7 +480,7 @@ void AModengEnemySpawner::CheckWaveProgress()
 
 	if (CurrentWave >= TotalWaves)
 	{
-		EndGame(true);
+		StartVictoryResultDelay();
 		return;
 	}
 
@@ -498,6 +498,33 @@ void AModengEnemySpawner::HandlePlayerDeathAnimationFinished()
 	EndGame(false);
 }
 
+void AModengEnemySpawner::StartVictoryResultDelay()
+{
+	if (bGameEnded || bVictoryResultPending)
+	{
+		return;
+	}
+
+	bVictoryResultPending = true;
+	bWaveActive = false;
+	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
+	GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
+
+	if (VictoryResultDelay <= 0.0f)
+	{
+		FinishVictoryResultDelay();
+		return;
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(VictoryResultTimer, this, &AModengEnemySpawner::FinishVictoryResultDelay, VictoryResultDelay, false);
+}
+
+void AModengEnemySpawner::FinishVictoryResultDelay()
+{
+	bVictoryResultPending = false;
+	EndGame(true);
+}
+
 void AModengEnemySpawner::EndGame(bool bPlayerWon)
 {
 	if (bGameEnded)
@@ -510,6 +537,8 @@ void AModengEnemySpawner::EndGame(bool bPlayerWon)
 	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 	GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);
 	GetWorld()->GetTimerManager().ClearTimer(LevelTravelTimer);
+	GetWorld()->GetTimerManager().ClearTimer(VictoryResultTimer);
+	bVictoryResultPending = false;
 
 	if (bShowGameplayDebugMessages && GEngine)
 	{

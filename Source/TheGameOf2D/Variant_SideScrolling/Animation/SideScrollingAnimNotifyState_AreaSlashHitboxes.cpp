@@ -91,6 +91,7 @@ void USideScrollingAnimNotifyState_AreaSlashHitboxes::EvaluateHitboxes(USkeletal
 
 			const float DamageAmount = Character->GetCurrentAttackDamage() * Hitbox.DamageMultiplier;
 			Enemy->ApplyDamageToEnemy(DamageAmount, Character);
+			Character->PlayAttackHitSoundAtLocation(Enemy->GetActorLocation());
 			MarkEnemyDamaged(Enemy, HitboxIndex, RuntimeState);
 
 			if (!Enemy->IsDead() && Hitbox.KnockbackDistance > 0.0f)

@@ -13,6 +13,7 @@ class UAnimSequenceBase;
 class UInputAction;
 class USceneComponent;
 class USkeletalMesh;
+class USoundBase;
 class AModengEnemy;
 struct FInputActionValue;
 
@@ -299,8 +300,11 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Side Scrolling|Skill")
 	float CurrentMana = 200.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill")
+	bool bAutoRegenerateMana = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
-	float ManaRegenPerSecond = 5.0f;
+	float ManaRegenPerSecond = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Skill", meta = (ClampMin = "0.0"))
 	float Skill1ManaCost = 10.0f;
@@ -361,6 +365,15 @@ protected:
 	/** Extra attack radius gained for each weapon level after level 1 */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Combat", meta = (ClampMin = "0.0"))
 	float RadiusGainPerWeaponLevel = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Audio")
+	TObjectPtr<USoundBase> AttackHitSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Audio", meta = (ClampMin = "0.0"))
+	float AttackHitSoundVolume = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Side Scrolling|Audio", meta = (ClampMin = "0.01"))
+	float AttackHitSoundPitch = 1.0f;
 
 	/** Ink needed to reach the next weapon level */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Progression", meta = (ClampMin = "1"))
@@ -648,6 +661,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Side Scrolling|Combat")
 	float GetSideScrollingFacingSign() const;
+
+	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Audio")
+	void PlayAttackHitSoundAtLocation(FVector HitLocation);
 
 	UFUNCTION(BlueprintCallable, Category="Side Scrolling|Health")
 	bool ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource = nullptr);

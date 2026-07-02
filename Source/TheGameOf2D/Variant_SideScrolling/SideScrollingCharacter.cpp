@@ -26,6 +26,7 @@
 #include "ModengEnemy.h"
 #include "ModengLantern.h"
 #include "SideScrollingInteractable.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -1663,6 +1664,7 @@ void ASideScrollingCharacter::DamageEnemyFromAttack(AModengEnemy* Enemy, const F
 	}
 
 	Enemy->ApplyDamageToEnemy(GetCurrentAttackDamage() * AttackWindow.DamageMultiplier, this);
+	PlayAttackHitSoundAtLocation(Enemy->GetActorLocation());
 	if (!Enemy->IsDead())
 	{
 		if (bDeferAttackKnockback)
@@ -2348,7 +2350,7 @@ void ASideScrollingCharacter::UpdateSkillResources(float DeltaSeconds)
 		return;
 	}
 
-	if (MaxMana > 0.0f && ManaRegenPerSecond > 0.0f)
+	if (bAutoRegenerateMana && MaxMana > 0.0f && ManaRegenPerSecond > 0.0f)
 	{
 		CurrentMana = FMath::Clamp(CurrentMana + ManaRegenPerSecond * DeltaSeconds, 0.0f, MaxMana);
 	}
@@ -2936,6 +2938,16 @@ float ASideScrollingCharacter::GetCurrentAttackRadius() const
 float ASideScrollingCharacter::GetSideScrollingFacingSign() const
 {
 	return LastFacingX >= 0.0f ? 1.0f : -1.0f;
+}
+
+void ASideScrollingCharacter::PlayAttackHitSoundAtLocation(FVector HitLocation)
+{
+	if (!AttackHitSound || !GetWorld())
+	{
+		return;
+	}
+
+	UGameplayStatics::PlaySoundAtLocation(this, AttackHitSound, HitLocation, AttackHitSoundVolume, AttackHitSoundPitch);
 }
 
 bool ASideScrollingCharacter::ApplyDamageToPlayer(float DamageAmount, AActor* DamageSource)

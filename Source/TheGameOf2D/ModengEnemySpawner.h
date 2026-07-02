@@ -118,6 +118,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI")
 	TSubclassOf<UModengResultWidget> ResultWidgetClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|UI", meta = (ClampMin = "0.0"))
+	float VictoryResultDelay = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawner|Debug")
 	bool bShowGameplayDebugMessages = false;
 
@@ -133,11 +136,13 @@ protected:
 	FTimerHandle SpawnTimer;
 	FTimerHandle NextWaveTimer;
 	FTimerHandle LevelTravelTimer;
+	FTimerHandle VictoryResultTimer;
 	UPROPERTY(Transient)
 	TObjectPtr<UModengResultWidget> ResultWidget;
 
 	bool bWaveActive = false;
 	bool bGameEnded = false;
+	bool bVictoryResultPending = false;
 	bool bSpawningPausedForCinematic = false;
 	bool bStartSpawningAfterCinematic = false;
 	int32 BossesSpawnedThisWave = 0;
@@ -168,6 +173,8 @@ protected:
 	void CheckWaveProgress();
 	UFUNCTION()
 	void HandlePlayerDeathAnimationFinished();
+	void StartVictoryResultDelay();
+	void FinishVictoryResultDelay();
 	void EndGame(bool bPlayerWon);
 	void ShowResultWidget(bool bPlayerWon);
 	void ShowLevelCompleteWidget();
