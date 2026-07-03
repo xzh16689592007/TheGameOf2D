@@ -13,6 +13,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
@@ -24,6 +25,8 @@
 
 ASideScrollingPlayerController::ASideScrollingPlayerController()
 {
+	PrimaryActorTick.bTickEvenWhenPaused = true;
+
 	OpeningCinematicSequence = TSoftObjectPtr<ULevelSequence>(FSoftObjectPath(TEXT("/Game/MoDeng/Cinematics/LS_Level01_Intro.LS_Level01_Intro")));
 	OpeningCinematicSequenceLevelTwo = TSoftObjectPtr<ULevelSequence>(FSoftObjectPath(TEXT("/Game/MoDeng/Cinematics/LS_Level02_Intro.LS_Level02_Intro")));
 
@@ -72,6 +75,11 @@ void ASideScrollingPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (bPauseMenuOpen && (!PauseMenuWidget || !PauseMenuWidget->IsInViewport()))
+	{
+		RestoreGameplayInputAfterPause();
+	}
+
 	if (bAutoDisableInputDuringCinematics && IsLocalPlayerController())
 	{
 		SetCinematicInputLocked(IsAnyLevelSequencePlaying());
@@ -85,8 +93,10 @@ void ASideScrollingPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ASideScrollingPlayerController::TryRepairNearestLantern);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
-	InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
+	FInputKeyBinding& EscapePauseBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
+	EscapePauseBinding.bExecuteWhenPaused = true;
+	FInputKeyBinding& PPauseBinding = InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ASideScrollingPlayerController::TogglePauseMenu);
+	PPauseBinding.bExecuteWhenPaused = true;
 
 	// only add IMCs for local player controllers
 	if (IsLocalPlayerController())
@@ -113,18 +123,28 @@ void ASideScrollingPlayerController::SetupInputComponent()
 
 void ASideScrollingPlayerController::TogglePauseMenu()
 {
-	if (!IsLocalPlayerController() || bCinematicInputLocked)
+	if (!IsLocalPlayerController())
 	{
 		return;
 	}
 
-	if (PauseMenuWidget && PauseMenuWidget->IsInViewport())
+	if (bPauseMenuOpen || (PauseMenuWidget && PauseMenuWidget->IsInViewport()))
 	{
 		HidePauseMenu();
 		return;
 	}
 
+	if (bCinematicInputLocked)
+	{
+		return;
+	}
+
 	ShowPauseMenu();
+}
+
+void ASideScrollingPlayerController::ResumeGameplayFromPause()
+{
+	HidePauseMenu();
 }
 
 void ASideScrollingPlayerController::ShowPauseMenu()
@@ -150,11 +170,16 @@ void ASideScrollingPlayerController::ShowPauseMenu()
 		PauseMenuWidget->AddToViewport(90);
 	}
 
-	FInputModeUIOnly InputMode;
+	bPauseMenuOpen = true;
+
+	FInputModeGameAndUI InputMode;
 	InputMode.SetWidgetToFocus(PauseMenuWidget->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
 	SetShowMouseCursor(true);
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
 	SetPause(true);
 }
 
@@ -165,9 +190,53 @@ void ASideScrollingPlayerController::HidePauseMenu()
 		PauseMenuWidget->RemoveFromParent();
 	}
 
+	bPauseMenuOpen = false;
+	RestoreGameplayInputAfterPause();
+}
+
+void ASideScrollingPlayerController::RestoreGameplayInputAfterPause()
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(RestoreGameplayInputTimer);
+	}
+
+	bPauseMenuOpen = false;
 	SetPause(false);
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+	ResetIgnoreMoveInput();
+	ResetIgnoreLookInput();
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+	SetShowMouseCursor(false);
+
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		ControlledPawn->EnableInput(this);
+	}
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &ASideScrollingPlayerController::ReapplyGameplayInputNextTick);
+	}
+}
+
+void ASideScrollingPlayerController::ReapplyGameplayInputNextTick()
+{
+	SetPause(false);
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+	ResetIgnoreMoveInput();
+	ResetIgnoreLookInput();
 	SetInputMode(FInputModeGameOnly());
 	SetShowMouseCursor(false);
+
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		ControlledPawn->EnableInput(this);
+	}
 }
 
 TSubclassOf<UPauseWidget> ASideScrollingPlayerController::GetPauseMenuClassForCurrentLevel() const

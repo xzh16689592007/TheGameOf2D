@@ -23,6 +23,7 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Btn_Resume;

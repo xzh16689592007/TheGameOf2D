@@ -1,5 +1,6 @@
 #include "PauseWidget.h"
 
+#include "Variant_SideScrolling/SideScrollingPlayerController.h"
 #include "Components/Button.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -8,9 +9,9 @@ void UPauseWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	if (Btn_Resume && !Btn_Resume->OnClicked.IsBound())
+	if (Btn_Resume)
 	{
-		Btn_Resume->OnClicked.AddDynamic(this, &UPauseWidget::ResumeGame);
+		Btn_Resume->OnClicked.AddUniqueDynamic(this, &UPauseWidget::ResumeGame);
 	}
 
 	if (Btn_Restart && !Btn_Restart->OnClicked.IsBound())
@@ -24,8 +25,20 @@ void UPauseWidget::NativeConstruct()
 	}
 }
 
+void UPauseWidget::NativeDestruct()
+{
+	RestoreGameplayInput();
+	Super::NativeDestruct();
+}
+
 void UPauseWidget::ResumeGame()
 {
+	if (ASideScrollingPlayerController* SideScrollingController = Cast<ASideScrollingPlayerController>(GetOwningPlayer()))
+	{
+		SideScrollingController->ResumeGameplayFromPause();
+		return;
+	}
+
 	RestoreGameplayInput();
 	RemoveFromParent();
 }

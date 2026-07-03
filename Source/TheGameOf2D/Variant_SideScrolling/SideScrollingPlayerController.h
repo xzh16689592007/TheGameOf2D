@@ -27,6 +27,9 @@ class ASideScrollingPlayerController : public APlayerController
 public:
 
 	ASideScrollingPlayerController();
+
+	UFUNCTION(BlueprintCallable, Category="Pause")
+	void ResumeGameplayFromPause();
 	
 protected:
 
@@ -137,6 +140,8 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UPauseWidget> PauseMenuWidget;
 
+	bool bPauseMenuOpen = false;
+
 protected:
 
 	/** Gameplay initialization */
@@ -158,6 +163,8 @@ protected:
 	void TogglePauseMenu();
 	void ShowPauseMenu();
 	void HidePauseMenu();
+	void RestoreGameplayInputAfterPause();
+	void ReapplyGameplayInputNextTick();
 	TSubclassOf<UPauseWidget> GetPauseMenuClassForCurrentLevel() const;
 
 	/** Returns true if the player should use UMG touch controls */
@@ -177,5 +184,7 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ALevelSequenceActor> ActiveOpeningCinematicActor = nullptr;
+
+	FTimerHandle RestoreGameplayInputTimer;
 
 };
